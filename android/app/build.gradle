@@ -1,0 +1,33 @@
+plugins { id 'com.android.application' }
+
+def buildNo = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+
+android {
+    namespace 'io.github.elschmoko.saltandsteel'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'io.github.elschmoko.saltandsteel'
+        minSdk 24
+        targetSdk 34
+        versionCode buildNo
+        versionName "1.0.${buildNo}"
+    }
+    signingConfigs {
+        release {
+            storeFile file('../saltandsteel.keystore')
+            storePassword System.getenv('KEYSTORE_PASSWORD') ?: 'saltandsteel'
+            keyAlias 'saltandsteel'
+            keyPassword System.getenv('KEYSTORE_PASSWORD') ?: 'saltandsteel'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

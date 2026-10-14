@@ -1,0 +1,53 @@
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', 'index.html', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Pack the current game as the offline copy
+        run: |
+          mkdir -p android/app/src/main/assets
+          cp index.html android/app/src/main/assets/index.html
+
+      - name: Build the APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+
+      - name: Name the APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk SaltAndSteel.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SaltAndSteel-apk
+          path: SaltAndSteel.apk
+
+      - name: Publish to the Android release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android
+          name: Salt & Steel for Android
+          make_latest: true
+          body: |
+            Install SaltAndSteel.apk on an Android phone (allow installs from your browser or file manager when asked).
+            The app loads the game from GitHub Pages on every start, so it updates by itself whenever the game is pushed. Without a connection it opens the last version it saw.
+          files: SaltAndSteel.apk

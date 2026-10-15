@@ -141,7 +141,9 @@ function supplyRange(F) { return 5 + (has(F, 'casks') ? 2 : 0); }
 function costStr(c) { var o = []; if (c.a) o.push(c.a + ' timber'); if (c.c) o.push(c.c + ' gold'); if (c.f) o.push(c.f + ' rum'); return o.join(', ') || 'nothing'; }
 
 function log(G, kind, txt, key, fid) { G.log.push({ t: G.turn, k: kind, txt: txt, key: key || null, f: fid == null ? null : fid }); if (G.log.length > 150) G.log.shift(); }
-function ev(G, e) { G.ev.push(e); }
+function ev(G, e, to) { G.ev.push(Object.assign({}, e, { to: to })); }
+function evTo(G, e, ids) { ids.forEach(function (id) { if (id != null && G.factions[id] && G.factions[id].human) ev(G, e, id); }); }
+function humanIds(G) { return G.factions.filter(function (F) { return F.human; }).map(function (F) { return F.id; }); }
 function fname(G, fid) { return fid === NEUTRAL || fid == null ? 'Freebooters' : FACTIONS[G.factions[fid].key].short; }
 
 /* ---------- relations ---------- */
@@ -178,7 +180,7 @@ function declareWar(G, a, b, silent) {
   var B = G.factions[b];
   log(G, 'war', fname(G, a) + ' declared war on ' + fname(G, b) + '.', null, a);
   G.factions.forEach(function (F) { if (F.alive && F.id !== a && F.id !== b) addMod(G, a, F.id, broke ? 'Broke a truce' : 'Warmonger', broke ? -15 : -6, 25); });
-  if (B.human && !silent) ev(G, { k: 'msg', f: a, line: 'war', title: 'War declared' });
+  if (B.human && !silent) ev(G, { k: 'msg', f: a, line: 'war', title: 'War declared' }, B.id);
   return true;
 }
 function makePeace(G, a, b) {
@@ -309,7 +311,7 @@ function contactCheck(G, fid, vis) {
   var out = [];
   for (var k in vis) { var h = G.hexes[k]; if (h.terr != null && h.terr !== fid && meet(G, fid, h.terr)) out.push(h.terr); }
   G.fleets.forEach(function (fl) { if (fl.owner >= 0 && fl.owner !== fid && vis[fkey(fl)] && meet(G, fid, fl.owner)) out.push(fl.owner); });
-  out.forEach(function (o) { log(G, 'diplo', 'First sighting of the ' + FACTIONS[G.factions[o].key].n + '.', null, o); if (G.factions[fid].human) ev(G, { k: 'msg', f: o, line: 'greet', title: 'Sail ho' }); });
+  out.forEach(function (o) { log(G, 'diplo', 'First sighting of the ' + FACTIONS[G.factions[o].key].n + '.', null, o); if (G.factions[fid].human) ev(G, { k: 'msg', f: o, line: 'greet', title: 'Sail ho' }, fid); });
   return out;
 }
 
@@ -479,9 +481,9 @@ function onEnter(G, fl, k) {
     else if (roll === 2) { fl.ships.brig = (fl.ships.brig || 0) + 2; fl.auto = false; txt = 'refloated two brigs'; }
     else { var f = 20 + gint(G, 15); gain(F, { f: f }); txt = 'hauled up ' + f + ' rum from the hold'; }
     log(G, 'info', fname(G, fl.owner) + ' searched a wreck and ' + txt + '.', k, fl.owner);
-    if (F.human) ev(G, { k: 'find', key: k, txt: 'Your crew ' + txt + '.' });
+    if (F.human) ev(G, { k: 'find', key: k, txt: 'Your crew ' + txt + '.' }, F.id);
   }
-  if (h.debris && (h.debris.a || h.debris.c)) { gain(F, h.debris); if (F.human) ev(G, { k: 'find', key: k, txt: 'Flotsam hauled aboard: ' + costStr(h.debris) + '.' }); h.debris = null; }
+  if (h.debris && (h.debris.a || h.debris.c)) { gain(F, h.debris); if (F.human) ev(G, { k: 'find', key: k, txt: 'Flotsam hauled aboard: ' + costStr(h.debris) + '.' }, F.id); h.debris = null; }
 }
 function settle(G, fl) {
   fl = mergeAt(G, fl);
@@ -616,7 +618,7 @@ function attack(G, fl, dest) {
     if (!res.wiped) settle(G, fl);
     log(G, 'battle', fname(G, fl.owner) + (res.wiped ? ' lost a fleet at ' : ' was beaten off at ') + res.name + '.', dest, fl.owner);
   }
-  if (AF.human || (DF && DF.human)) ev(G, { k: 'battle', res: res });
+  evTo(G, { k: 'battle', res: res }, [AF.id, DF ? DF.id : null]);
   return res;
 }
 
@@ -683,8 +685,8 @@ function raid(G, fl) {
   b.raidCd = 4; fl.raided = G.turn;
   addMod(G, fl.owner, b.owner, 'Plunder', -12, 20);
   log(G, 'war', fname(G, fl.owner) + ' plundered ' + h.name + ' for ' + costStr(loot) + '.', fkey(fl), fl.owner);
-  if (V.human) ev(G, { k: 'find', key: fkey(fl), bad: true, txt: fname(G, fl.owner) + ' plundered ' + h.name + ' and took ' + costStr(loot) + '.' });
-  else if (F.human && grnd(G) < 0.5) ev(G, { k: 'msg', f: b.owner, line: 'raided', title: 'Plunder taken' });
+  if (V.human) ev(G, { k: 'find', key: fkey(fl), bad: true, txt: fname(G, fl.owner) + ' plundered ' + h.name + ' and took ' + costStr(loot) + '.' }, V.id);
+  else if (F.human && grnd(G) < 0.5) ev(G, { k: 'msg', f: b.owner, line: 'raided', title: 'Plunder taken' }, F.id);
   return { ok: true, loot: loot };
 }
 function eliminate(G, fid, by) {
@@ -711,7 +713,7 @@ function capture(G, k, by) {
   G.factions[by].st.captured++;
   addMod(G, by, old, 'Took our harbours', -15, 30);
   log(G, 'war', fname(G, by) + ' captured ' + h.name + ' from ' + fname(G, old) + '.', k, by);
-  if (G.factions[old].human || G.factions[by].human) ev(G, { k: 'capture', key: k, by: by, from: old, cap: wasCap });
+  evTo(G, { k: 'capture', key: k, by: by, from: old, cap: wasCap }, [old, by]);
   recalcTerr(G);
   if (wasCap) eliminate(G, old, by);
 }
@@ -721,20 +723,27 @@ function siegeNeed(b) { return b.cap ? 4 : b.kind === 'colony' ? 2 : 1; }
 function islandsHeld(G) { var by = {}; G.isl.forEach(function (isl) { var o = islandOwner(G, isl); if (o != null) by[o] = (by[o] || 0) + 1; }); return { total: G.isl.length, by: by, need: Math.ceil(G.isl.length * HEG_SHARE) }; }
 function checkOver(G) {
   if (G.over) return G.over;
-  var H = G.factions[0], aliveN = G.factions.filter(function (F) { return F.alive; });
+  var humans = G.factions.filter(function (F) { return F.human; }), liveH = humans.filter(function (F) { return F.alive; });
+  var aliveN = G.factions.filter(function (F) { return F.alive; });
   var sh = islandsHeld(G);
-  if (!H.alive) G.over = { win: false, reason: H.capital ? 'Your home port has fallen.' : 'Your ships were lost before you made landfall.', winner: null };
-  else if (aliveN.length === 1) G.over = { win: true, reason: 'Every rival capital has struck its colours.', winner: 0 };
+  if (liveH.length < humans.length) {
+    var lost = humans.filter(function (F) { return !F.alive; })[0], w = liveH.length === 1 ? liveH[0].id : (aliveN.length === 1 ? aliveN[0].id : null);
+    var why = humans.length === 1 ? (lost.capital ? 'Your home port has fallen.' : 'Your ships were lost before you made landfall.') : fname(G, lost.id) + (lost.capital ? ' has lost its home port.' : ' lost its ships before making landfall.');
+    G.over = { winner: w, reason: why };
+  }
+  else if (aliveN.length === 1) G.over = { winner: aliveN[0].id, reason: 'Every rival capital has struck its colours.' };
   else {
     var lead = null; for (var f in sh.by) if (sh.by[f] >= sh.need) lead = +f;
     if (lead == null) { if (G.heg) { log(G, 'info', 'The bid for mastery of the seas by ' + fname(G, G.heg.f) + ' has foundered.', null, G.heg.f); G.heg = null; } }
-    else if (!G.heg || G.heg.f !== lead) { G.heg = { f: lead, t: G.turn }; log(G, 'war', fname(G, lead) + ' holds ' + sh.by[lead] + ' of ' + sh.total + ' islands. Mastery of the seas in ' + HEG_TURNS + ' turns.', null, lead); ev(G, { k: 'heg', f: lead }); }
-    else if (G.turn - G.heg.t >= HEG_TURNS) G.over = lead === 0 ? { win: true, reason: 'You have held ' + sh.by[lead] + ' of ' + sh.total + ' islands long enough. These seas sail under your flag.', winner: 0 } : { win: false, reason: 'The ' + FACTIONS[G.factions[lead].key].n + ' holds ' + sh.by[lead] + ' of ' + sh.total + ' islands and rules the seas.', winner: lead };
+    else if (!G.heg || G.heg.f !== lead) { G.heg = { f: lead, t: G.turn }; log(G, 'war', fname(G, lead) + ' holds ' + sh.by[lead] + ' of ' + sh.total + ' islands. Mastery of the seas in ' + HEG_TURNS + ' turns.', null, lead); evTo(G, { k: 'heg', f: lead }, humanIds(G)); }
+    else if (G.turn - G.heg.t >= HEG_TURNS) {
+      var solo = humans.length === 1 && G.factions[lead].human;
+      G.over = { winner: lead, reason: solo ? 'You have held ' + sh.by[lead] + ' of ' + sh.total + ' islands long enough. These seas sail under your flag.' : fname(G, lead) + ' has held ' + sh.by[lead] + ' of ' + sh.total + ' islands long enough. These seas sail under its flag.' };
+    }
   }
-  if (G.over) { G.over.turn = G.turn; ev(G, { k: 'over' }); }
+  if (G.over) { G.over.turn = G.turn; humanIds(G).forEach(function (id) { ev(G, { k: 'over' }, id); }); }
   return G.over;
 }
-
 /* ---------- round processing ---------- */
 function completeItem(G, k, it) {
   var h = G.hexes[k], b = h.base, F = G.factions[b.owner];
@@ -752,7 +761,7 @@ function researchTick(G, F, s) {
   while (F.research && F.rp >= TECH[F.research].cost && guard++ < 5) {
     var id = F.research; F.rp -= TECH[id].cost; F.tech[id] = 1; F.research = null;
     log(G, 'tech', fname(G, F.id) + ' mastered ' + TECH[id].n + '.', null, F.id);
-    if (F.human) ev(G, { k: 'tech', id: id }); else aiResearch(G, F);
+    if (F.human) ev(G, { k: 'tech', id: id }, F.id); else aiResearch(G, F);
   }
   if (!F.research && availTech(F).length === 0) F.rp = 0;
 }
@@ -783,15 +792,14 @@ function endRound(G) {
   G.fleets.forEach(function (fl) { fl.mp = fleetSpeed(G, fl); });
   checkOver(G);
   if (!G.over) {
-    var H = G.factions[0];
-    if (H.human) {
-      var vis = vision(G, 0);
+    G.factions.filter(function (H) { return H.human && H.alive; }).forEach(function (H) {
+      var me = H.id, vis = vision(G, me);
       // lookouts wake anchored and exploring fleets when an enemy comes close
-      G.fleets.forEach(function (fl) { if (fl.owner === 0 && (fl.hold || fl.auto)) { hexesWithin(G, fkey(fl), 2).forEach(function (x) { fleetsAt(G, x).forEach(function (o) { if (o.owner !== 0 && (o.owner !== NEUTRAL || o.pirate) && atWar(G, 0, o.owner) && fleetVisible(G, 0, o, vis)) { fl.hold = false; if (fl.auto) { fl.auto = false; fl.dest = null; } } }); }); } });
-      G.fleets.filter(function (fl) { return fl.owner === 0 && fl.auto; }).forEach(function (fl) { if (fl.dead) return; var r = explore(G, fl); if (r.done) ev(G, { k: 'find', key: fkey(r.fleet), txt: 'Nothing left to chart within reach. Your explorers await orders.' }); });
-      G.fleets.filter(function (fl) { return fl.owner === 0 && fl.dest && !fl.auto; }).forEach(function (fl) { if (fl.dead) return; var r = advance(G, fl); if (r.battle || (!r.moved && !r.arrived)) r.fleet.dest = null; });
-      vis = vision(G, 0); contactCheck(G, 0, vis);
-    }
+      G.fleets.forEach(function (fl) { if (fl.owner === me && (fl.hold || fl.auto)) { hexesWithin(G, fkey(fl), 2).forEach(function (x) { fleetsAt(G, x).forEach(function (o) { if (o.owner !== me && (o.owner !== NEUTRAL || o.pirate) && atWar(G, me, o.owner) && fleetVisible(G, me, o, vis)) { fl.hold = false; if (fl.auto) { fl.auto = false; fl.dest = null; } } }); }); } });
+      G.fleets.filter(function (fl) { return fl.owner === me && fl.auto; }).forEach(function (fl) { if (fl.dead) return; var r = explore(G, fl); if (r.done) ev(G, { k: 'find', key: fkey(r.fleet), txt: 'Nothing left to chart within reach. Your explorers await orders.' }, me); });
+      G.fleets.filter(function (fl) { return fl.owner === me && fl.dest && !fl.auto; }).forEach(function (fl) { if (fl.dead) return; var r = advance(G, fl); if (r.battle || (!r.moved && !r.arrived)) r.fleet.dest = null; });
+      vis = vision(G, me); contactCheck(G, me, vis);
+    });
   }
 }
 /* ---------- roaming pirates ----------
@@ -810,7 +818,7 @@ function piratesTurn(G) {
     if (!goal) { var opt = nbrs(here).filter(function (n) { var h = G.hexes[n]; return h && isWater(h) && !h.base && !busy[n]; }); if (opt.length) path = [opt[Math.floor(rnd() * opt.length)]]; }
     var to = path[Math.min(1, path.length - 1)]; if (!to) return;
     delete busy[here]; fl.q = G.hexes[to].q; fl.r = G.hexes[to].r; busy[to] = [fl];
-    if (G.hexes[to].terr === fl.prey && G.hexes[here].terr !== fl.prey) { log(G, 'loss', 'Pirates are raiding the waters of ' + fname(G, fl.prey) + '.', to, fl.prey); if (prey.human) ev(G, { k: 'find', key: to, bad: true, txt: 'Pirates are raiding your waters. Sink them for a bounty.' }); }
+    if (G.hexes[to].terr === fl.prey && G.hexes[here].terr !== fl.prey) { log(G, 'loss', 'Pirates are raiding the waters of ' + fname(G, fl.prey) + '.', to, fl.prey); if (prey.human) ev(G, { k: 'find', key: to, bad: true, txt: 'Pirates are raiding your waters. Sink them for a bounty.' }, prey.id); }
   });
   if (G.turn < 8) return;
   G.factions.forEach(function (F) {
@@ -831,11 +839,11 @@ function endTurn(G) {
   if (!G.over) piratesTurn(G);
   if (!G.over) endRound(G);
 }
-function idleList(G) {
-  var F = G.factions[0], out = [];
+function idleList(G, me) {
+  me = me || 0; var F = G.factions[me], out = [];
   if (F.capital != null && !F.research && availTech(F).length) out.push({ k: 'research' });
-  for (var k in G.hexes) { var b = G.hexes[k].base; if (b && b.owner === 0 && b.kind === 'colony' && !b.queue.length && !besieged(G, k)) { var any = buildOptions(G, k).concat(shipOptions(G, k)).some(function (o) { return o.ok; }); if (any) out.push({ k: 'base', key: k }); } }
-  G.fleets.forEach(function (fl) { if (fl.owner !== 0 || fl.mp <= 0 || fl.hold || fl.dest || fl.auto) return; var h = G.hexes[fkey(fl)]; if (h.base && h.base.siege && h.base.siege.by === 0) return; out.push({ k: 'fleet', key: fkey(fl) }); });
+  for (var k in G.hexes) { var b = G.hexes[k].base; if (b && b.owner === me && b.kind === 'colony' && !b.queue.length && !besieged(G, k)) { var any = buildOptions(G, k).concat(shipOptions(G, k)).some(function (o) { return o.ok; }); if (any) out.push({ k: 'base', key: k }); } }
+  G.fleets.forEach(function (fl) { if (fl.owner !== me || fl.mp <= 0 || fl.hold || fl.dest || fl.auto) return; var h = G.hexes[fkey(fl)]; if (h.base && h.base.siege && h.base.siege.by === me) return; out.push({ k: 'fleet', key: fkey(fl) }); });
   return out;
 }
 
@@ -855,13 +863,13 @@ function aiDiplomacy(G, F, P) {
       if (!F.met[O.id] && !r.border) return;
       var host = P.aggr * 22 - attitude(G, F.id, O.id) * 0.6 + (r.border ? 12 : 0) + (mine / strength(G, O.id) - 1) * 30 + (G.turn > 70 ? 10 : 0);
       if (host > 28 && grnd(G) < 0.12 + P.aggr * 0.1) {
-        if (O.human && (!r.warned || G.turn - r.warned > 30)) { r.warned = G.turn; ev(G, { k: 'msg', f: F.id, line: 'threat', title: 'A warning', txt: 'They may declare war within a few turns. A gift could cool tempers. So could a stronger fleet.' }); return; }
+        if (O.human && (!r.warned || G.turn - r.warned > 30)) { r.warned = G.turn; ev(G, { k: 'msg', f: F.id, line: 'threat', title: 'A warning', txt: 'They may declare war within a few turns. A gift could cool tempers. So could a stronger fleet.' }, O.id); return; }
         if (O.human && G.turn - r.warned < 3) return;
         declareWar(G, F.id, O.id); wars.push(O.id);
       }
     } else if (r.warT > 12) {
       var theirs = strength(G, O.id);
-      if ((mine < theirs * 0.7 || r.warT > 30) && grnd(G) < 0.2) { if (O.human) { if (!r.offered || G.turn - r.offered > 8) { r.offered = G.turn; ev(G, { k: 'offer', f: F.id }); } } else if (strength(G, O.id) < mine * 1.6 || r.warT > 30) makePeace(G, F.id, O.id); }
+      if ((mine < theirs * 0.7 || r.warT > 30) && grnd(G) < 0.2) { if (O.human) { if (!r.offered || G.turn - r.offered > 8) { r.offered = G.turn; ev(G, { k: 'offer', f: F.id }, O.id); } } else if (strength(G, O.id) < mine * 1.6 || r.warT > 30) makePeace(G, F.id, O.id); }
     }
   });
 }
@@ -1110,10 +1118,11 @@ function newGame(opts) {
   var keys = [opts.faction || 'crown'], rest = FACTION_ORDER.filter(function (x) { return x !== keys[0]; });
   for (var j = rest.length - 1; j > 0; j--) { var m = gint(G, j + 1), t = rest[j]; rest[j] = rest[m]; rest[m] = t; }
   keys = keys.concat(rest.slice(0, size.rivals));
+  var nHumans = opts.allAI ? 0 : Math.min(keys.length, Math.max(1, opts.humans || 1));
   var caps = genMap(G, size.R, keys.length);
   keys.forEach(function (key, i) {
-    var F = { id: i, key: key, human: i === 0 && !opts.allAI, alive: true, res: { a: 80, c: 40, f: 25 }, rp: 0, tech: {}, research: null, capital: null, start: caps[i], explored: {}, met: {}, starved: false, ai: { reserve: 0 }, st: { built: 0, lost: 0, kills: 0, won: 0, fought: 0, claimed: 0, captured: 0 } };
-    if (i === 0 && !opts.allAI && G.diff === 'easy') { F.res.a += 30; F.res.c += 15; }
+    var F = { id: i, key: key, human: i < nHumans, alive: true, res: { a: 80, c: 40, f: 25 }, rp: 0, tech: {}, research: null, capital: null, start: caps[i], explored: {}, met: {}, starved: false, ai: { reserve: 0 }, st: { built: 0, lost: 0, kills: 0, won: 0, fought: 0, claimed: 0, captured: 0 } };
+    if (i < nHumans && G.diff === 'easy') { F.res.a += 30; F.res.c += 15; }
     G.factions.push(F);
     // two ships lying off the island that would make a good home; where to settle is the captain's choice
     var sea = nbrs(caps[i]).filter(function (x) { return isWater(G.hexes[x]); }), out = sea.filter(function (x) { return hdist(G.hexes[x], G.hexes['0,0']) < hdist(G.hexes[caps[i]], G.hexes['0,0']); })[0] || sea[0];
@@ -1123,7 +1132,7 @@ function newGame(opts) {
   for (var k in G.hexes) { var hx = G.hexes[k]; if (hx.base && hx.base.kind === 'station') newFleet(G, NEUTRAL, k, { brig: 2, frigate: 1 }); }
   recalcTerr(G);
   G.factions.forEach(function (F) { if (!F.human) for (var j2 = 0; j2 < G.factions.length; j2++) if (j2 !== F.id && !G.factions[j2].human) F.met[j2] = 1; });
-  if (G.factions[0].human) { var vis = vision(G, 0); contactCheck(G, 0, vis); }
+  G.factions.forEach(function (F) { if (F.human) contactCheck(G, F.id, vision(G, F.id)); });
   log(G, 'info', 'Two ships of the ' + FACTIONS[keys[0]].n + ' reach unknown waters.', caps[0], 0);
   return G;
 }
@@ -1132,7 +1141,7 @@ HX.NEUTRAL = NEUTRAL; HX.HEG_TURNS = HEG_TURNS; HX.DIRS = DIRS; HX.SIZES = SIZES
 HX.TECH = TECH; HX.TECH_ORDER = TECH_ORDER; HX.BRANCH = BRANCH; HX.FACTIONS = FACTIONS; HX.FACTION_ORDER = FACTION_ORDER; HX.KIND_N = KIND_N; HX.TYPE_N = TYPE_N;
 HX.K = K; HX.nbrs = nbrs; HX.hdist = hdist; HX.fkey = fkey; HX.hexesWithin = hexesWithin; HX.rngFrom = rngFrom; HX.isWater = isWater; HX.passable = passable;
 HX.islandOf = islandOf; HX.plotsOf = plotsOf; HX.islandOwner = islandOwner; HX.pirateToll = pirateToll; HX.TRAITS = TRAITS; HX.statFor = statFor; HX.shipStat = shipStat; HX.shipName = shipName; HX.shipCost = shipCost; HX.fit = fit; HX.plotYield = plotYield; HX.bestPlot = bestPlot; HX.freePlots = freePlots;
-HX.newGame = newGame; HX.endTurn = endTurn; HX.income = income; HX.baseYield = baseYield; HX.buildOptions = buildOptions; HX.shipOptions = shipOptions; HX.enqueue = enqueue; HX.cancelQueue = cancelQueue;
+HX.newGame = newGame; HX.humanIds = humanIds; HX.evTo = evTo; HX.endTurn = endTurn; HX.income = income; HX.baseYield = baseYield; HX.buildOptions = buildOptions; HX.shipOptions = shipOptions; HX.enqueue = enqueue; HX.cancelQueue = cancelQueue;
 HX.availTech = availTech; HX.setResearch = setResearch; HX.reach = reach; HX.order = order; HX.attack = attack; HX.forecast = forecast; HX.defenders = defenders; HX.blockReason = blockReason; HX.explore = explore;
 HX.canClaim = canClaim; HX.claim = claim; HX.canFound = canFound; HX.found = found; HX.canRaid = canRaid; HX.raid = raid; HX.supply = supply; HX.supplyFor = supplyFor; HX.vision = vision; HX.fleetVisible = fleetVisible; HX.contactCheck = contactCheck;
 HX.fleetAt = fleetAt; HX.fleetsAt = fleetsAt; HX.fleetSpeed = fleetSpeed; HX.fpower = fpower; HX.shipCount = shipCount; HX.topClass = topClass; HX.sloopsOnly = sloopsOnly; HX.slots = slots; HX.usedSlots = usedSlots; HX.tier = tier; HX.baseDef = baseDef; HX.besieged = besieged; HX.siegeNeed = siegeNeed;

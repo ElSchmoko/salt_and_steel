@@ -1,3 +1,6 @@
+// Faction id of the player at this screen. Online play sets it to the seat the server assigned.
+var ME = 0;
+function isMine(e) { return e.to === ME; }
 /* Salt & Steel interface: screens, instruments, ship's papers, input, the first-turn guide, saving. */
 (function () {
 'use strict';
@@ -64,7 +67,7 @@ function renderTitle() {
   var sv = savedGame(), rec = record();
   setAccent(HX.FACTIONS[S.setup.faction].col);
   $('#title').innerHTML = '<h1>Salt <i>&amp;</i><br>Steel</h1><p class="tag">Chart the sea. Raise ports. Rule the islands.</p>' +
-    (sv ? '<button class="btn solid" data-act="continue"><span>Continue<small>' + HX.FACTIONS[sv.factions[0].key].n + ' · turn ' + sv.turn + '</small></span></button>' : '') +
+    (sv ? '<button class="btn solid" data-act="continue"><span>Continue<small>' + HX.FACTIONS[sv.factions[ME].key].n + ' · turn ' + sv.turn + '</small></span></button>' : '') +
     '<button class="btn' + (sv ? '' : ' solid') + '" data-act="newgame">New voyage</button><button class="btn" data-act="help">How to play</button><button class="btn" data-act="options">Options</button><div class="ver">' + (rec.w + rec.l ? 'SERVICE RECORD · ' + rec.w + ' WON · ' + rec.l + ' LOST' : '') + '</div>';
   show('title');
 }
@@ -94,7 +97,7 @@ function renderSetup() {
 /* ---------- game entry, saving ---------- */
 function enterGame(G) {
   S.G = G; S.sel = null; S.tab = 'place'; S.reach = null; S.detach = null; S.courseMode = false; S.tick = null; S.logSeen = G.log.length; S.idleIdx = 0;
-  setAccent(HX.FACTIONS[G.factions[0].key].col);
+  setAccent(HX.FACTIONS[G.factions[ME].key].col);
   show('game'); RN.buildTerrain(G); layout(); RN.reset(G);
   if (G.tut && G.tutStep == null) G.tutStep = 0;
   refresh();
@@ -102,11 +105,11 @@ function enterGame(G) {
 function save() { if (S.G && !S.G.over) store.set(SAVE, JSON.stringify(S.G)); else store.del(SAVE); }
 
 /* ---------- refresh cycle ---------- */
-function mover(fl) { if (!S.detach) return fl; var ships = {}, n = 0; for (var t in fl.ships) { var v = Math.min(fl.ships[t], S.detach[t] || 0); if (v) { ships[t] = v; n += v; } } return n ? { id: fl.id, owner: 0, q: fl.q, r: fl.r, ships: ships, mp: fl.mp } : null; }
-function sitesNear(G, k) { var out = []; HX.nbrs(k).forEach(function (n) { var h = G.hexes[n]; if (!h || h.type !== 'land') return; var c = HX.canFound(G, 0, n); if (c.ok || c.poor) out.push(n); }); return out; }
+function mover(fl) { if (!S.detach) return fl; var ships = {}, n = 0; for (var t in fl.ships) { var v = Math.min(fl.ships[t], S.detach[t] || 0); if (v) { ships[t] = v; n += v; } } return n ? { id: fl.id, owner: ME, q: fl.q, r: fl.r, ships: ships, mp: fl.mp } : null; }
+function sitesNear(G, k) { var out = []; HX.nbrs(k).forEach(function (n) { var h = G.hexes[n]; if (!h || h.type !== 'land') return; var c = HX.canFound(G, ME, n); if (c.ok || c.poor) out.push(n); }); return out; }
 function calcReach() {
   var G = S.G; S.reach = null; S.course = null; S.sup = null; S.sites = null;
-  if (!S.sel) return; var fl = HX.fleetAt(G, S.sel, 0); if (!fl) { S.courseMode = false; return; }
+  if (!S.sel) return; var fl = HX.fleetAt(G, S.sel, ME); if (!fl) { S.courseMode = false; return; }
   var st = sitesNear(G, S.sel); if (st.length) S.sites = st;
   if (fl.mp <= 0) { S.courseMode = false; return; }
   var mv = mover(fl); if (!mv) return;
@@ -115,18 +118,18 @@ function calcReach() {
 }
 function refresh() {
   var G = S.G; if (!G) return;
-  S.vis = HX.vision(G, 0); HX.contactCheck(G, 0, S.vis);
-  RN.buildOverlay(G, S.vis, G.factions[0].explored);
+  S.vis = HX.vision(G, ME); HX.contactCheck(G, ME, S.vis);
+  RN.buildOverlay(G, S.vis, G.factions[ME].explored);
   if (S.sel && !G.hexes[S.sel]) S.sel = null;
   calcReach();
-  S.idle = G.over ? [] : HX.idleList(G); S.idleBases = {}; S.idle.forEach(function (i) { if (i.k === 'base') S.idleBases[i.key] = 1; });
+  S.idle = G.over ? [] : HX.idleList(G, ME); S.idleBases = {}; S.idle.forEach(function (i) { if (i.k === 'base') S.idleBases[i.key] = 1; });
   renderTop(); renderSheet(); renderFabs(); renderCoach(); layout(); tutCheck(); pump();
 }
 function layout() { var cvs = $('#cv'), app = $('#app'), dpr = Math.min([3, 2, 1.5][Q.lvl], window.devicePixelRatio || 1), w = app.clientWidth, h = app.clientHeight; if (cvs.width !== Math.round(w * dpr) || cvs.height !== Math.round(h * dpr)) { cvs.width = Math.round(w * dpr); cvs.height = Math.round(h * dpr); } RN.resize(w, h, dpr); RN.V.padTop = 56 + (S.screen === 'game' ? $('#coach').offsetHeight : 0); RN.V.padBot = S.screen === 'game' ? $('#bottom').offsetHeight : 0; $('#toast').style.bottom = (S.screen === 'game' ? RN.V.padBot + 10 : 200) + 'px'; }
 
 /* ---------- instruments ---------- */
 function renderTop() {
-  var G = S.G, F = G.factions[0], inc = HX.income(G, 0), h = '';
+  var G = S.G, F = G.factions[ME], inc = HX.income(G, ME), h = '';
   [['a', 'timber'], ['c', 'gold'], ['f', 'rum']].forEach(function (r) { var v = inc[r[0]]; h += '<button class="res" data-act="eco" aria-label="' + HX.RESN[r[0]] + ' ' + F.res[r[0]] + ', ' + (v >= 0 ? 'plus ' : 'minus ') + Math.abs(v) + ' a turn">' + ic(r[1]) + '<span><b>' + F.res[r[0]] + '</b><span class="' + (v < 0 ? 'neg' : '') + '">' + (v >= 0 ? '+' : '−') + Math.abs(v) + '</span></span></button>'; });
   h += '<button class="res" data-act="research" aria-label="Lore ' + inc.s + ' a turn">' + ic('sci') + '<span><b>' + inc.s + '</b><span>a turn</span></span></button>';
   h += '<div class="turn"><span>TURN</span><b>' + G.turn + '</b></div>';
@@ -134,11 +137,11 @@ function renderTop() {
   $('#top').innerHTML = h;
 }
 function renderFabs() {
-  var G = S.G, F = G.factions[0], inc = HX.income(G, 0), h = '<div class="fabl">', n = S.idle.length;
+  var G = S.G, F = G.factions[ME], inc = HX.income(G, ME), h = '<div class="fabl">', n = S.idle.length;
   var rt = F.research ? Math.max(1, Math.ceil((HX.TECH[F.research].cost - F.rp) / Math.max(1, inc.s))) : null, anyTech = F.capital != null && HX.availTech(F).length;
   h += '<button class="sq' + (!F.research && anyTech ? ' alert' : '') + '" data-act="research" aria-label="Discoveries">' + ic('sci') + (F.research ? '<span class="sub">' + rt + 'T</span>' : anyTech ? '<span class="badge">!</span>' : '') + '</button>';
   var unread = G.log.length - S.logSeen; h += '<button class="sq" data-act="log" aria-label="Ship\'s log">' + ic('log') + (unread > 0 ? '<span class="badge">' + Math.min(99, unread) + '</span>' : '') + '</button>';
-  var wars = 0; G.factions.forEach(function (O) { if (O.alive && O.id && HX.atWar(G, 0, O.id)) wars++; });
+  var wars = 0; G.factions.forEach(function (O) { if (O.alive && O.id && HX.atWar(G, ME, O.id)) wars++; });
   h += '<button class="sq' + (wars ? ' war' : '') + '" data-act="diplo" aria-label="Parley">' + ic('diplo') + (wars ? '<span class="sub bad">WAR</span>' : '') + '</button></div><div class="fabr">';
   if (n) h += '<button class="sq" id="endsm" data-act="endturn" aria-label="End turn">' + ic('end') + '</button><button class="btn solid" id="next" data-act="next"><span>Next ' + ic('next', 's12') + '</span><small>' + n + ' to go</small></button>';
   else h += '<button class="btn solid end" id="next" data-act="endturn"><span>End turn ' + ic('end', 's12') + '</span></button>';
@@ -149,17 +152,17 @@ function yieldHTML(y) { var o = ''; [['a', 'timber'], ['c', 'gold'], ['f', 'rum'
 var WATER = { fog: 'half speed, hides fleets', wreck: 'sail in to search it', reef: 'impassable' };
 var SUITS = { wood: 'Best for a sawmill.', hill: 'Best for a gold mine.', cane: 'Best for a distillery.', grass: 'Fair ground for anything.' };
 function landList(G, isl) { var c = {}; isl.land.forEach(function (l) { var t = G.hexes[l].ter; c[t] = (c[t] || 0) + 1; }); return ['wood', 'hill', 'cane', 'grass'].filter(function (t) { return c[t]; }).map(function (t) { return HX.TER_N[t].toLowerCase(); }).join(', '); }
-function queueHTML(b) { if (!b.queue.length) return ''; var o = '<div class="sec">'; b.queue.forEach(function (it, i) { var nm = it.k === 's' ? HX.shipName(S.G, 0, it.id) : HX.BLD[it.id].n + (it.lvl > 1 ? ' ' + roman(it.lvl) : ''); var pp = ''; for (var j = 0; j < it.total; j++) pp += '<i' + (j < it.total - it.left ? ' class="on"' : '') + '></i>'; o += '<div class="row"><span class="grow">' + nm + ' <span class="dim">· ' + (i === 0 ? turns(it.left) + ' left' : 'waiting') + '</span></span><span class="pips">' + pp + '</span><button class="x" data-act="qcancel" data-i="' + i + '" aria-label="Cancel ' + nm + '">' + ic('x', 's12') + '</button></div>'; }); return o + '</div>'; }
+function queueHTML(b) { if (!b.queue.length) return ''; var o = '<div class="sec">'; b.queue.forEach(function (it, i) { var nm = it.k === 's' ? HX.shipName(S.G, ME, it.id) : HX.BLD[it.id].n + (it.lvl > 1 ? ' ' + roman(it.lvl) : ''); var pp = ''; for (var j = 0; j < it.total; j++) pp += '<i' + (j < it.total - it.left ? ' class="on"' : '') + '></i>'; o += '<div class="row"><span class="grow">' + nm + ' <span class="dim">· ' + (i === 0 ? turns(it.left) + ' left' : 'waiting') + '</span></span><span class="pips">' + pp + '</span><button class="x" data-act="qcancel" data-i="' + i + '" aria-label="Cancel ' + nm + '">' + ic('x', 's12') + '</button></div>'; }); return o + '</div>'; }
 function traitHTML(tr) { var t = HX.TRAITS[tr]; return '<b>' + t[0] + '.</b> ' + t[1]; }
 function num(v) { return Math.round(v * 10) / 10; }
 function segHTML(h, tab, fl) { return '<div class="seg"><button data-act="tab" data-id="place" aria-pressed="' + (tab === 'place') + '">' + esc(h.name || HX.TYPE_N[h.type]) + '</button><button data-act="tab" data-id="fleet" aria-pressed="' + (tab === 'fleet') + '">Fleet · ' + HX.shipCount(fl.ships) + '</button></div>'; }
 function fleetHTML(G, k, fl, close) {
-  var F = G.factions[0], h = G.hexes[k], n = HX.shipCount(fl.ships), top = HX.topClass(fl.ships), o = '';
+  var F = G.factions[ME], h = G.hexes[k], n = HX.shipCount(fl.ships), top = HX.topClass(fl.ships), o = '';
   var state = fl.auto ? 'exploring' : fl.dest ? 'on course' : fl.hold ? 'at anchor' : '';
-  o += '<div class="sh-head"><div class="lead">' + shipImg(F.key, top, 0.8) + '</div><div class="grow"><h2>' + (n === 1 ? HX.shipName(G, 0, top) : 'Fleet of ' + n) + '</h2><div class="meta">Strength ' + HX.fpower(G, 0, fl.ships) + ' · moves ' + fl.mp + '/' + HX.fleetSpeed(G, fl) + (state ? ' · ' + state : '') + '</div></div>' + close + '</div>';
+  o += '<div class="sh-head"><div class="lead">' + shipImg(F.key, top, 0.8) + '</div><div class="grow"><h2>' + (n === 1 ? HX.shipName(G, ME, top) : 'Fleet of ' + n) + '</h2><div class="meta">Strength ' + HX.fpower(G, ME, fl.ships) + ' · moves ' + fl.mp + '/' + HX.fleetSpeed(G, fl) + (state ? ' · ' + state : '') + '</div></div>' + close + '</div>';
   o += '<div class="sec">';
-  if (S.detach) { o += '<div class="list">'; HX.SHIP_ORDER.forEach(function (t) { if (!fl.ships[t]) return; o += '<div class="row"><span class="grow">' + HX.shipName(G, 0, t) + ' <span class="dim">of ' + fl.ships[t] + '</span></span><span class="step"><button data-act="det" data-id="' + t + '" data-d="-1" aria-label="Fewer">−</button><b>' + (S.detach[t] || 0) + '</b><button data-act="det" data-id="' + t + '" data-d="1" aria-label="More">+</button></span></div>'; }); o += '</div>'; }
-  else if (n > 1) o += chips(G, 0, fl.ships);
+  if (S.detach) { o += '<div class="list">'; HX.SHIP_ORDER.forEach(function (t) { if (!fl.ships[t]) return; o += '<div class="row"><span class="grow">' + HX.shipName(G, ME, t) + ' <span class="dim">of ' + fl.ships[t] + '</span></span><span class="step"><button data-act="det" data-id="' + t + '" data-d="-1" aria-label="Fewer">−</button><b>' + (S.detach[t] || 0) + '</b><button data-act="det" data-id="' + t + '" data-d="1" aria-label="More">+</button></span></div>'; }); o += '</div>'; }
+  else if (n > 1) o += chips(G, ME, fl.ships);
   o += '</div>';
   var a2 = '', cl = HX.canClaim(G, fl), rd = HX.canRaid(G, fl);
   if (cl.kind) a2 += '<button class="btn solid" data-act="claim"' + (cl.ok ? '' : ' disabled') + '>' + ic('flag') + '<span>' + (cl.kind === 'station' ? 'Claim port' : 'Raise flag') + (cl.ok ? '' : '<small>' + cl.why + '</small>') + '</span>' + costHTML(cl.cost, F) + '</button>';
@@ -176,7 +179,7 @@ function fleetHTML(G, k, fl, close) {
 function renderSheet() {
   var el = $('#sheet'), G = S.G, k = S.sel;
   if (!k || !G.hexes[k]) { el.hidden = true; return; }
-  var h = G.hexes[k], F = G.factions[0], vis = S.vis[k], b = h.base, o = '', owner = b ? b.owner : null, mine = owner === 0, isl = HX.islandOf(G, k), fl = HX.fleetAt(G, k, 0);
+  var h = G.hexes[k], F = G.factions[ME], vis = S.vis[k], b = h.base, o = '', owner = b ? b.owner : null, mine = owner === ME, isl = HX.islandOf(G, k), fl = HX.fleetAt(G, k, ME);
   var tab = sheetTab();
   var close = '<button class="sq plain" data-act="desel" aria-label="Close" style="width:44px;height:44px;margin:-6px -6px -6px 0">' + ic('x') + '</button>';
   el.className = tab === 'fleet' ? 'deck' : 'paper';
@@ -187,8 +190,8 @@ function renderSheet() {
   if (h.type === 'land') {
     title = isl.name;
     if (b) { meta.push(owner == null ? (b.kind === 'station' ? 'Free port' : 'Abandoned port') : HX.KIND_N[b.kind] + (b.cap ? ', capital' : '')); if (owner != null && !mine) meta.push(HX.FACTIONS[G.factions[owner].key].n); }
-    else { meta.push(HX.TER_N[h.ter]); meta.push(!isl.port ? 'unclaimed' : io === 0 ? 'yours' : io == null ? 'abandoned' : HX.fname(G, io)); }
-  } else { title = HX.TYPE_N[h.type]; if (h.terr != null) meta.push(h.terr === 0 ? 'your waters' : HX.fname(G, h.terr) + ' waters'); if (WATER[h.type]) meta.push(WATER[h.type]); }
+    else { meta.push(HX.TER_N[h.ter]); meta.push(!isl.port ? 'unclaimed' : io === ME ? 'yours' : io == null ? 'abandoned' : HX.fname(G, io)); }
+  } else { title = HX.TYPE_N[h.type]; if (h.terr != null) meta.push(h.terr === ME ? 'your waters' : HX.fname(G, h.terr) + ' waters'); if (WATER[h.type]) meta.push(WATER[h.type]); }
   if (!vis) meta.push('out of sight');
   o += '<div class="sh-head">';
   if (b && owner != null && b.kind === 'colony') o += '<div class="tierbox"><small>TIER</small><b>' + roman(HX.tier(G, k)) + '</b></div>';
@@ -204,15 +207,15 @@ function renderSheet() {
       o += '<div class="acts"><button class="btn sel" data-act="build" data-tab="b">' + ic('build') + 'Build</button><button class="btn' + (b.b.yard ? ' sel' : '') + '" data-act="build" data-tab="s">' + ic('ship') + 'Ships</button></div>';
     }
   } else if (b && owner != null) {
-    var war = HX.atWar(G, 0, owner), df = HX.baseDef(G, h);
+    var war = HX.atWar(G, ME, owner), df = HX.baseDef(G, h);
     o += '<div class="sec"><div class="row"><span class="grow">' + (war ? '<b class="bad">At war</b>' : 'At peace') + (df.hp ? ' · guns ' + df.atk + ', walls ' + df.hp : ' · undefended') + '</span>' + (war ? '' : '<button class="btn" data-act="diplo" style="min-height:36px;font-size:14px">Parley</button>') + '</div>';
-    if (b.siege) { var need = HX.siegeNeed(b), pp2 = ''; for (var s2 = 0; s2 < need; s2++) pp2 += '<i' + (s2 < b.siege.prog ? ' class="on"' : '') + '></i>'; o += '<div class="row"><span class="grow">' + (b.siege.by === 0 ? 'Your blockade' : 'Blockaded by ' + HX.fname(G, b.siege.by)) + ' · falls in ' + turns(need - b.siege.prog) + '</span><span class="pips">' + pp2 + '</span></div>'; }
+    if (b.siege) { var need = HX.siegeNeed(b), pp2 = ''; for (var s2 = 0; s2 < need; s2++) pp2 += '<i' + (s2 < b.siege.prog ? ' class="on"' : '') + '></i>'; o += '<div class="row"><span class="grow">' + (b.siege.by === ME ? 'Your blockade' : 'Blockaded by ' + HX.fname(G, b.siege.by)) + ' · falls in ' + turns(need - b.siege.prog) + '</span><span class="pips">' + pp2 + '</span></div>'; }
     o += '</div>';
   } else if (b) {
     o += '<div class="sec"><div class="hint">' + (b.kind === 'station' ? 'Beat the guard, then claim it.' : 'Sail in to claim it.') + '</div></div>';
   } else if (h.type === 'land') {
     var pl = h.plot, town = isl.port;
-    if (io === 0) {
+    if (io === ME) {
       var tb = G.hexes[town].base;
       if (pl) {
         o += '<div class="sec"><div class="row"><span class="grow"><b>' + HX.BLD[pl.id].n + (pl.lvl ? ' ' + roman(pl.lvl) : '') + '</b> <span class="dim">· ' + (pl.lvl ? '+' + HX.plotYield(F, h, pl.id, pl.lvl) + ' ' + HX.RESN[HX.BLD[pl.id].res].toLowerCase() : 'building') + '</span></span>' + ic({ a: 'timber', c: 'gold', f: 'rum', s: 'sci' }[HX.BLD[pl.id].res]) + '</div></div>';
@@ -224,7 +227,7 @@ function renderSheet() {
         o += '<div class="sec"><div class="hint">' + SUITS[h.ter] + '</div></div><div class="acts"><button class="btn sel" data-act="buildat" data-k="' + k + '"' + (tb.queue.length >= 3 ? ' disabled' : '') + '>' + ic('build') + '<span>Build here' + (tb.queue.length >= 3 ? '<small>Queue full</small>' : '') + '</span></button><button class="btn" data-act="goto" data-k="' + town + '">' + ic('flag') + 'Port</button></div>';
       }
     } else if (!isl.port) {
-      var n = isl.land.length, cc = HX.canFound(G, 0, k);
+      var n = isl.land.length, cc = HX.canFound(G, ME, k);
       o += '<div class="sec"><div class="hint">' + (n === 1 ? 'An islet: room for a harbour only.' : n + ' land hexes: ' + landList(G, isl) + '.') + (F.capital == null ? ' Your first port is free.' : '') + '</div></div>';
       if (cc.dry) o += '<div class="sec"><div class="row">No anchorage on this side.</div></div>';
       else if (cc.far) o += '<div class="sec"><div class="row"><span class="grow">Bring a fleet alongside</span>' + costHTML(cc.cost, F) + '</div></div>';
@@ -233,29 +236,29 @@ function renderSheet() {
       o += '<div class="sec"><div class="hint">' + (pl && pl.lvl ? HX.BLD[pl.id].n + ' ' + roman(pl.lvl) + '. ' : '') + 'Take the port to take the island.</div></div><div class="acts"><button class="btn" data-act="goto" data-k="' + town + '">' + ic('flag') + 'Show port</button></div>';
     }
   }
-  HX.fleetsAt(G, k).forEach(function (o2) { if (o2.owner === 0 || !HX.fleetVisible(G, 0, o2, S.vis)) return; o += '<div class="sec"><div class="lbl">' + sw(G, o2.owner) + (o2.owner < 0 ? (o2.pirate ? 'Pirates' : 'Harbour guard') : HX.fname(G, o2.owner) + ' fleet') + ' · strength ' + HX.fpower(G, o2.owner, o2.ships) + '</div>' + chips(G, o2.owner, o2.ships) + '</div>'; });
+  HX.fleetsAt(G, k).forEach(function (o2) { if (o2.owner === ME || !HX.fleetVisible(G, ME, o2, S.vis)) return; o += '<div class="sec"><div class="lbl">' + sw(G, o2.owner) + (o2.owner < 0 ? (o2.pirate ? 'Pirates' : 'Harbour guard') : HX.fname(G, o2.owner) + ' fleet') + ' · strength ' + HX.fpower(G, o2.owner, o2.ships) + '</div>' + chips(G, o2.owner, o2.ships) + '</div>'; });
   el.innerHTML = o; el.hidden = false; el.scrollTop = 0;
 }
-function sheetTab() { var G = S.G, k = S.sel; if (!k || !G.hexes[k]) return 'place'; var fl = HX.fleetAt(G, k, 0); if (!fl) return 'place'; return G.hexes[k].base ? S.tab : 'fleet'; }
+function sheetTab() { var G = S.G, k = S.sel; if (!k || !G.hexes[k]) return 'place'; var fl = HX.fleetAt(G, k, ME); if (!fl) return 'place'; return G.hexes[k].base ? S.tab : 'fleet'; }
 function renderCoach() {
   var G = S.G, h = '';
   if (G.tut && G.tutStep != null && TUT[G.tutStep]) { var st = TUT[G.tutStep]; h += '<div class="coach paper"><div class="hd"><span>FIRST ORDERS ' + (G.tutStep + 1) + '/' + TUT.length + '</span><button data-act="' + (st.final ? 'tutdone' : 'tutskip') + '">' + (st.final ? 'Aye' : 'Skip guide') + '</button></div><div>' + st.txt(G) + '</div></div>'; }
   else if (S.tick) h += '<button class="tick" data-act="log"><i class="dot"></i><span>' + esc(S.tick) + '</span></button>';
-  if (G.heg) h += '<button class="tick" data-act="diplo"><i class="dot" style="background:var(--warn)"></i><span>' + (G.heg.f === 0 ? 'You win' : HX.fname(G, G.heg.f) + ' wins') + ' mastery of the seas in ' + turns(Math.max(1, HX.HEG_TURNS - (G.turn - G.heg.t))) + '.</span></button>';
+  if (G.heg) h += '<button class="tick" data-act="diplo"><i class="dot" style="background:var(--warn)"></i><span>' + (G.heg.f === ME ? 'You win' : HX.fname(G, G.heg.f) + ' wins') + ' mastery of the seas in ' + turns(Math.max(1, HX.HEG_TURNS - (G.turn - G.heg.t))) + '.</span></button>';
   $('#coach').innerHTML = h;
 }
 
 /* ---------- first-turn guide ---------- */
-function capKey(G) { return G.factions[0].capital; }
-function myFleet(G) { var fl = G.fleets.filter(function (x) { return x.owner === 0; }); return fl.length ? HX.fkey(fl[0]) : null; }
-function canSettle(G, k) { var c = k && G.hexes[k] && G.hexes[k].type === 'land' ? HX.canFound(G, 0, k) : null; return !!(c && c.ok); }
+function capKey(G) { return G.factions[ME].capital; }
+function myFleet(G) { var fl = G.fleets.filter(function (x) { return x.owner === ME; }); return fl.length ? HX.fkey(fl[0]) : null; }
+function canSettle(G, k) { var c = k && G.hexes[k] && G.hexes[k].type === 'land' ? HX.canFound(G, ME, k) : null; return !!(c && c.ok); }
 var TUT = [
   { txt: function () { return 'Two ships and no harbour. Tap your <b>fleet</b>.'; }, hex: function (G) { return myFleet(G); }, done: function (G) { return !!capKey(G) || (!!S.sel && S.sel === myFleet(G)); } },
-  { txt: function () { return 'Lit water is where you can sail this turn. Gold rings mark shores you can settle. <b>Tap one</b> to choose your home.'; }, hex: function (G) { var st = G.factions[0].start; return S.sites && S.sites.indexOf(st) >= 0 ? st : S.sel === myFleet(G) ? null : myFleet(G); }, done: function (G) { return !!capKey(G) || canSettle(G, S.sel); } },
-  { txt: function () { return 'Your first port is free. Every later one costs more than the last. Tap <b>Found home port</b>.'; }, glow: '[data-act="found"]', hex: function (G) { return canSettle(G, S.sel) ? null : G.factions[0].start; }, done: function (G) { return !!capKey(G); } },
+  { txt: function () { return 'Lit water is where you can sail this turn. Gold rings mark shores you can settle. <b>Tap one</b> to choose your home.'; }, hex: function (G) { var st = G.factions[ME].start; return S.sites && S.sites.indexOf(st) >= 0 ? st : S.sel === myFleet(G) ? null : myFleet(G); }, done: function (G) { return !!capKey(G) || canSettle(G, S.sel); } },
+  { txt: function () { return 'Your first port is free. Every later one costs more than the last. Tap <b>Found home port</b>.'; }, glow: '[data-act="found"]', hex: function (G) { return canSettle(G, S.sel) ? null : G.factions[ME].start; }, done: function (G) { return !!capKey(G); } },
   { txt: function () { return 'A port builds on its island\'s land. Tap <b>Build</b>, then <b>Sawmill</b>.'; }, glow: '[data-act="build"][data-tab="b"],[data-act="enq"][data-id="sawmill"]', hex: function (G) { return S.sel === capKey(G) ? null : capKey(G); }, done: function (G) { return G.hexes[capKey(G)].base.queue.length > 0; } },
-  { txt: function () { return 'Now the ships. Tap your <b>fleet</b>, then <b>Explore</b>: it will chart the sea by itself.'; }, glow: '[data-act="explore"]', hex: function (G) { var k = myFleet(G); return k && S.sel !== k ? k : null; }, done: function (G) { return !myFleet(G) || G.fleets.some(function (x) { return x.owner === 0 && (x.auto || x.mp === 0); }); } },
-  { txt: function () { return 'Tap the <b>scroll</b> and pick a discovery.'; }, glow: '#fabs [data-act="research"],[data-act="techgo"]', done: function (G) { return !!G.factions[0].research; } },
+  { txt: function () { return 'Now the ships. Tap your <b>fleet</b>, then <b>Explore</b>: it will chart the sea by itself.'; }, glow: '[data-act="explore"]', hex: function (G) { var k = myFleet(G); return k && S.sel !== k ? k : null; }, done: function (G) { return !myFleet(G) || G.fleets.some(function (x) { return x.owner === ME && (x.auto || x.mp === 0); }); } },
+  { txt: function () { return 'Tap the <b>scroll</b> and pick a discovery.'; }, glow: '#fabs [data-act="research"],[data-act="techgo"]', done: function (G) { return !!G.factions[ME].research; } },
   { txt: function () { return 'End the turn with the <b>hourglass</b>.'; }, glow: '[data-act="endturn"]', done: function (G) { return G.turn > 1; } },
   { txt: function () { return 'Take every rival capital, or hold two thirds of the islands. More ports mean more land to build on.'; }, final: true, done: function () { return false; } }
 ];
@@ -275,7 +278,7 @@ function tutCheck() {
 }
 
 /* ---------- selection and orders ---------- */
-function select(k, focus, tab) { var f0 = HX.fleetAt(S.G, k, 0); S.sel = k; S.tab = tab || 'place'; S.detach = null; S.courseMode = false; calcReach(); renderSheet(); layout(); if (focus || !RN.onScreen(S.G, k)) RN.focus(S.G, k); tutCheck(); }
+function select(k, focus, tab) { var f0 = HX.fleetAt(S.G, k, ME); S.sel = k; S.tab = tab || 'place'; S.detach = null; S.courseMode = false; calcReach(); renderSheet(); layout(); if (focus || !RN.onScreen(S.G, k)) RN.focus(S.G, k); tutCheck(); }
 function desel() { S.sel = null; S.reach = null; S.sup = null; S.course = null; S.sites = null; S.detach = null; S.courseMode = false; renderSheet(); layout(); tutCheck(); }
 function afterOrder(res) {
   S.detach = null; S.courseMode = false;
@@ -288,7 +291,7 @@ function afterOrder(res) {
 function tapHex(k) {
   var G = S.G; if (S.busy || !G || G.over) return;
   if (!G.hexes[k]) { desel(); return; }
-  var fl = S.sel ? HX.fleetAt(G, S.sel, 0) : null;
+  var fl = S.sel ? HX.fleetAt(G, S.sel, ME) : null;
   if (fl && k !== S.sel) {
     if (S.reach && S.reach[k]) { if (S.reach[k].atk) openForecast(fl, k); else afterOrder(HX.order(G, fl, k, S.detach)); return; }
     if (S.courseMode) { if (S.course && S.course[k]) afterOrder(HX.order(G, fl, k, S.detach)); else { toast(HX.blockReason(G, fl, k)); sfx('err'); } return; }
@@ -298,16 +301,16 @@ function tapHex(k) {
 }
 function openForecast(fl, k) {
   var G = S.G, mv = mover(fl) || fl, f = HX.forecast(G, mv, k, 60), h = G.hexes[k], known = S.vis[k];
-  var dfl = f.def.fleet, seen = dfl ? HX.fleetVisible(G, 0, dfl, S.vis) : true, dpow = HX.fpower(G, f.def.owner, f.def.ships);
+  var dfl = f.def.fleet, seen = dfl ? HX.fleetVisible(G, ME, dfl, S.vis) : true, dpow = HX.fpower(G, f.def.owner, f.def.ships);
   var o = head(h.base ? 'Attack ' + esc(h.name) + '?' : f.def.fleet && f.def.fleet.pirate ? 'Engage the pirates?' : 'Engage the ' + HX.fname(G, f.def.owner) + ' fleet?');
-  o += '<div class="vs"><div class="side"><h3>' + sw(G, 0) + 'YOUR FLEET · ' + HX.fpower(G, 0, mv.ships) + '</h3>' + chips(G, 0, mv.ships) + '</div><div class="mid">VS</div><div class="side"><h3>' + sw(G, f.def.owner) + HX.fname(G, f.def.owner).toUpperCase() + (known && seen ? ' · ' + dpow : '') + '</h3>' + (known && seen ? chips(G, f.def.owner, f.def.ships) : '<div class="hint">Strength unknown</div>') + (f.def.turret && f.def.turret.hp ? '<div class="chip soft">' + ic('shield', 's12') + 'Guns ' + f.def.turret.atk + ' · walls ' + f.def.turret.hp + '</div>' : '') + '</div></div>';
+  o += '<div class="vs"><div class="side"><h3>' + sw(G, ME) + 'YOUR FLEET · ' + HX.fpower(G, ME, mv.ships) + '</h3>' + chips(G, ME, mv.ships) + '</div><div class="mid">VS</div><div class="side"><h3>' + sw(G, f.def.owner) + HX.fname(G, f.def.owner).toUpperCase() + (known && seen ? ' · ' + dpow : '') + '</h3>' + (known && seen ? chips(G, f.def.owner, f.def.ships) : '<div class="hint">Strength unknown</div>') + (f.def.turret && f.def.turret.hp ? '<div class="chip soft">' + ic('shield', 's12') + 'Guns ' + f.def.turret.atk + ' · walls ' + f.def.turret.hp + '</div>' : '') + '</div></div>';
   var cls = f.p >= 0.7 ? 'good' : f.p >= 0.45 ? 'warn' : 'bad';
-  o += '<div class="row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px"><div style="display:flex;justify-content:space-between"><b class="cap ' + cls + '">' + f.label.toUpperCase() + '</b><b>' + Math.round(f.p * 100) + '% to win</b></div><div class="bar"><i style="width:' + Math.round(f.p * 100) + '%"></i></div><div class="hint">Losses: you ~' + Math.round(f.aLoss * 100) + '%, them ~' + Math.round(f.dLoss * 100) + '%.' + (h.base && h.base.owner != null && h.base.owner !== 0 ? ' Then hold it ' + turns(HX.siegeNeed(h.base)) + ' to take it.' : '') + '</div></div>';
+  o += '<div class="row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px"><div style="display:flex;justify-content:space-between"><b class="cap ' + cls + '">' + f.label.toUpperCase() + '</b><b>' + Math.round(f.p * 100) + '% to win</b></div><div class="bar"><i style="width:' + Math.round(f.p * 100) + '%"></i></div><div class="hint">Losses: you ~' + Math.round(f.aLoss * 100) + '%, them ~' + Math.round(f.dLoss * 100) + '%.' + (h.base && h.base.owner != null && h.base.owner !== ME ? ' Then hold it ' + turns(HX.siegeNeed(h.base)) + ' to take it.' : '') + '</div></div>';
   o += '<div class="acts"><button class="btn" data-act="close">Hold fire</button><button class="btn danger" data-act="attack" data-k="' + k + '">' + ic('sword') + 'Attack</button></div>';
   modal(o, true);
 }
 function doAttack(k) {
-  var G = S.G, fl = HX.fleetAt(G, S.sel, 0); if (!fl) { closeModal(); return; }
+  var G = S.G, fl = HX.fleetAt(G, S.sel, ME); if (!fl) { closeModal(); return; }
   var part = S.detach ? HX.split(G, fl, S.detach) : fl; S.detach = null;
   closeModal(true);
   var res = HX.attack(G, part, k);
@@ -322,10 +325,10 @@ function endTurn() {
   var bn = $('#banner'); bn.textContent = 'RIVAL FLEETS ARE UNDER SAIL'; bn.hidden = false;
   setTimeout(function () {
     HX.endTurn(G); S.busy = false; bn.hidden = true; S.idleIdx = 0;
-    var news = G.log.filter(function (l) { return l.t === G.turn - 1 && l.f !== 0 && (l.k === 'war' || l.k === 'diplo' || l.k === 'loss') && (l.f == null || l.f < 0 || G.factions[0].met[l.f]); });
+    var news = G.log.filter(function (l) { return l.t === G.turn - 1 && l.f !== ME && (l.k === 'war' || l.k === 'diplo' || l.k === 'loss') && (l.f == null || l.f < 0 || G.factions[ME].met[l.f]); });
     S.tick = news.length ? news[news.length - 1].txt : null;
     save(); refresh();
-    if (!G.over) { toast('Turn ' + G.turn); G.log.filter(function (l) { return l.t === G.turn - 1 && l.f === 0 && l.k === 'build'; }).slice(-2).forEach(function (l) { toast(esc(l.txt)); }); }
+    if (!G.over) { toast('Turn ' + G.turn); G.log.filter(function (l) { return l.t === G.turn - 1 && l.f === ME && l.k === 'build'; }).slice(-2).forEach(function (l) { toast(esc(l.txt)); }); }
   }, 160);
 }
 function nextAction() {
@@ -339,35 +342,35 @@ function nextAction() {
 var battleCtl = null;
 function pump() {
   var G = S.G; if (!G || S.modalOpen || S.screen !== 'game') return;
-  while (G.ev.length) {
-    var e = G.ev.shift();
+  while (G.ev.some(isMine)) {
+    var e = G.ev.splice(G.ev.findIndex(isMine), 1)[0];
     if (e.k === 'battle') { showBattle(e.res); return; }
-    if (e.k === 'msg') { if ((e.line === 'greet' && G.over) || !G.factions[0].met[e.f]) continue; showMsg(e); return; }
-    if (e.k === 'offer') { if (!G.factions[e.f].alive || !HX.atWar(G, 0, e.f)) continue; showOffer(e); return; }
-    if (e.k === 'heg') { var sh = HX.islandsHeld(G); modal(head('Mastery of the seas') + '<p class="quote">' + (e.f === 0 ? 'You hold ' + sh.by[0] + ' of ' + sh.total + ' islands. Keep them for ' + HX.HEG_TURNS + ' turns and these seas are yours.' : 'The ' + HX.FACTIONS[G.factions[e.f].key].n + ' holds ' + sh.by[e.f] + ' of ' + sh.total + ' islands. Take one back within ' + HX.HEG_TURNS + ' turns or they rule the seas.') + '</p><button class="btn solid" data-act="close">Understood</button>', true); sfx('war'); return; }
+    if (e.k === 'msg') { if ((e.line === 'greet' && G.over) || !G.factions[ME].met[e.f]) continue; showMsg(e); return; }
+    if (e.k === 'offer') { if (!G.factions[e.f].alive || !HX.atWar(G, ME, e.f)) continue; showOffer(e); return; }
+    if (e.k === 'heg') { var sh = HX.islandsHeld(G); modal(head('Mastery of the seas') + '<p class="quote">' + (e.f === ME ? 'You hold ' + sh.by[ME] + ' of ' + sh.total + ' islands. Keep them for ' + HX.HEG_TURNS + ' turns and these seas are yours.' : 'The ' + HX.FACTIONS[G.factions[e.f].key].n + ' holds ' + sh.by[e.f] + ' of ' + sh.total + ' islands. Take one back within ' + HX.HEG_TURNS + ' turns or they rule the seas.') + '</p><button class="btn solid" data-act="close">Understood</button>', true); sfx('war'); return; }
     if (e.k === 'over') { showOver(); return; }
     if (e.k === 'find') { toast(e.bad ? '<span class="bad">' + esc(e.txt) + '</span>' : esc(e.txt)); RN.addFx({ type: 'flash', key: e.key, dur: 500, col: e.bad ? P.danger : P.gold }); sfx(e.bad ? 'err' : 'ok'); }
     else if (e.k === 'tech') { toast(ic('sci') + ' ' + HX.TECH[e.id].n + ' mastered'); sfx('tech'); }
-    else if (e.k === 'capture') { RN.addFx({ type: 'flash', key: e.key, dur: 700, col: fcol(G, e.by) }); toast(e.by === 0 ? '<b>' + esc(G.hexes[e.key].name) + '</b> is yours.' : '<span class="bad">' + esc(G.hexes[e.key].name) + ' has fallen to ' + HX.fname(G, e.by) + '.</span>'); sfx(e.by === 0 ? 'win' : 'war'); }
+    else if (e.k === 'capture') { RN.addFx({ type: 'flash', key: e.key, dur: 700, col: fcol(G, e.by) }); toast(e.by === ME ? '<b>' + esc(G.hexes[e.key].name) + '</b> is yours.' : '<span class="bad">' + esc(G.hexes[e.key].name) + ' has fallen to ' + HX.fname(G, e.by) + '.</span>'); sfx(e.by === ME ? 'win' : 'war'); }
   }
 }
 function lossTable(G, owner, start, left, turret, turretLeft) { var o = ''; HX.SHIP_ORDER.forEach(function (t) { if (!start[t]) return; var l = left[t] || 0; o += '<div class="row"><span class="grow nw">' + HX.shipName(G, owner, t) + '</span><span class="nw">' + start[t] + ' → <b class="' + (l < start[t] ? 'bad' : 'good') + '">' + l + '</b></span></div>'; }); if (turret) o += '<div class="row"><span class="grow">Shore guns</span><b class="cap ' + (turretLeft ? 'good' : 'bad') + '">' + (turretLeft ? 'HELD' : 'SILENCED') + '</b></div>'; return o || '<div class="hint">No ships</div>'; }
 function battleResult(res) {
-  var G = S.G, mineAtt = res.att === 0, title, cls;
+  var G = S.G, mineAtt = res.att === ME, title, cls;
   if (mineAtt) { title = res.win ? 'Victory at ' + res.name : res.wiped ? 'Fleet lost at ' + res.name : 'Beaten off at ' + res.name; cls = res.win ? 'good' : 'bad'; }
   else { title = res.win ? 'Defeat at ' + res.name : res.name === 'sea' ? 'Attack at sea beaten off' : 'Attack on ' + res.name + ' beaten off'; cls = res.win ? 'bad' : 'good'; }
   var o = '<div class="big ' + cls + '">' + esc(title) + '</div><div class="vs"><div class="side"><h3>' + sw(G, res.att) + HX.fname(G, res.att).toUpperCase() + ' ATTACKED</h3>' + lossTable(G, res.att, res.a0, res.aLeft) + '</div><div class="mid"></div><div class="side"><h3>' + sw(G, res.def) + (res.pirate ? 'PIRATES' : HX.fname(G, res.def).toUpperCase()) + ' DEFENDED</h3>' + lossTable(G, res.def, res.d0, res.dLeft, res.turret, res.turretLeft) + '</div></div>';
-  if (res.bounty && res.att === 0) o += '<div class="row"><span class="grow">Pirate bounty</span>' + costHTML({ c: res.bounty }) + '</div>';
-  if (res.salvTo === 0 && (res.salv.a || res.salv.c)) o += '<div class="row"><span class="grow">Salvage hauled aboard</span>' + costHTML(res.salv) + '</div>';
+  if (res.bounty && res.att === ME) o += '<div class="row"><span class="grow">Pirate bounty</span>' + costHTML({ c: res.bounty }) + '</div>';
+  if (res.salvTo === ME && (res.salv.a || res.salv.c)) o += '<div class="row"><span class="grow">Salvage hauled aboard</span>' + costHTML(res.salv) + '</div>';
   o += '<button class="btn solid" data-act="close">Continue</button>';
   return o;
 }
 function showBattle(res) {
   var G = S.G;
   if (G.hexes[res.key] && !RN.onScreen(G, res.key)) RN.focus(G, res.key);
-  if (!S.opt.battles) { modal(battleResult(res), true); sfx(res.att === 0 === res.win ? 'ok' : 'err'); return; }
+  if (!S.opt.battles) { modal(battleResult(res), true); sfx(res.att === ME === res.win ? 'ok' : 'err'); return; }
   modal('<div class="cap" style="font-size:13px;text-align:center;letter-spacing:0.08em">' + sw(G, res.att) + HX.fname(G, res.att).toUpperCase() + ' <span class="dim">' + (res.name === 'sea' ? 'ENGAGES' : 'ATTACKS') + '</span> ' + (res.name === 'sea' ? sw(G, res.def) + (res.pirate ? 'PIRATES' : HX.fname(G, res.def).toUpperCase()) : esc(res.name).toUpperCase()) + '</div><canvas id="bcv"></canvas><button class="btn" data-act="bskip">Skip</button>', true);
-  var fin = function () { if (!battleCtl) return; battleCtl = null; var d = $('#modal .dlg'); if (d) d.innerHTML = battleResult(res); sfx((res.att === 0) === res.win ? 'win' : 'err'); };
+  var fin = function () { if (!battleCtl) return; battleCtl = null; var d = $('#modal .dlg'); if (d) d.innerHTML = battleResult(res); sfx((res.att === ME) === res.win ? 'win' : 'err'); };
   battleCtl = RN.battleScene($('#bcv'), res, G, fin); battleCtl.fin = fin;
   var n = 0, iv = setInterval(function () { if (!battleCtl || n++ > 5) { clearInterval(iv); return; } sfx('boom'); }, 800);
 }
@@ -382,11 +385,11 @@ function showOffer(e) {
   modal('<div class="fcard">' + envoy(G, e.f, 'An offer of peace') + '<p class="quote">“' + FD.voice.offer + '”</p></div><div class="acts"><button class="btn" data-act="close">Fight on</button><button class="btn solid" data-act="acceptpeace" data-f="' + e.f + '">Accept peace</button></div>', true); sfx('ok');
 }
 function showOver() {
-  var G = S.G, ov = G.over, F = G.factions[0], st = F.st, bases = HX.ownBases(G, 0);
+  var G = S.G, ov = G.over, F = G.factions[ME], st = F.st, bases = HX.ownBases(G, ME);
   store.del(SAVE);
-  if (!G.recorded) { G.recorded = true; var rec = record(); if (ov.win) rec.w++; else rec.l++; store.set(REC, JSON.stringify(rec)); }
-  var o = '<div class="big ' + (ov.win ? 'good' : 'bad') + '" style="font-size:36px;line-height:40px;padding-top:8px">' + (ov.win ? 'Victory' : 'Defeat') + '</div><p style="text-align:center;text-wrap:balance">' + esc(ov.reason) + '</p><div class="stats"><div><b>' + ov.turn + '</b><small>turns</small></div><div><b>' + bases + '</b><small>ports held</small></div><div><b>' + Object.keys(F.tech).length + '</b><small>discoveries</small></div><div><b>' + st.built + '</b><small>ships built</small></div><div><b>' + st.won + ' / ' + st.fought + '</b><small>battles won</small></div><div><b>' + st.kills + '</b><small>ships sunk</small></div></div><div class="acts"><button class="btn" data-act="totitle">Main menu</button><button class="btn solid" data-act="newgame">New voyage</button></div>';
-  modal(o, true); sfx(ov.win ? 'win' : 'war');
+  if (!G.recorded) { G.recorded = true; var rec = record(); if ((ov.winner === ME)) rec.w++; else rec.l++; store.set(REC, JSON.stringify(rec)); }
+  var o = '<div class="big ' + ((ov.winner === ME) ? 'good' : 'bad') + '" style="font-size:36px;line-height:40px;padding-top:8px">' + ((ov.winner === ME) ? 'Victory' : 'Defeat') + '</div><p style="text-align:center;text-wrap:balance">' + esc(ov.reason) + '</p><div class="stats"><div><b>' + ov.turn + '</b><small>turns</small></div><div><b>' + bases + '</b><small>ports held</small></div><div><b>' + Object.keys(F.tech).length + '</b><small>discoveries</small></div><div><b>' + st.built + '</b><small>ships built</small></div><div><b>' + st.won + ' / ' + st.fought + '</b><small>battles won</small></div><div><b>' + st.kills + '</b><small>ships sunk</small></div></div><div class="acts"><button class="btn" data-act="totitle">Main menu</button><button class="btn solid" data-act="newgame">New voyage</button></div>';
+  modal(o, true); sfx((ov.winner === ME) ? 'win' : 'war');
 }
 
 /* ---------- panels ---------- */
@@ -395,7 +398,7 @@ function bldItem(G, op, F, at) {
   return '<button class="item" data-act="enq" data-kind="b" data-id="' + op.id + '" data-at="' + (op.at || '') + '"' + (op.ok ? '' : ' disabled') + '><span class="art">' + art + '</span><span class="grow"><span class="nm">' + op.n + (op.lvl > 1 ? ' ' + roman(op.lvl) : '') + (where && !at ? '<span class="st">on ' + where + '</span>' : '') + '</span><span class="ds">' + (op.max ? 'Fully built.' : op.eff) + '</span>' + (op.ok || op.max ? '' : '<span class="why">' + op.why + '</span>') + '</span>' + (op.max ? '' : '<span class="rt">' + costHTML(op.cost, F) + '<span class="hint">' + turns(op.time) + '</span></span>') + '</button>';
 }
 function openBuild(tab, at) {
-  var G = S.G, k = townOf(G, S.sel); if (!k) return; var h = G.hexes[k], b = h.base, F = G.factions[0]; if (!b || b.owner !== 0) return;
+  var G = S.G, k = townOf(G, S.sel); if (!k) return; var h = G.hexes[k], b = h.base, F = G.factions[ME]; if (!b || b.owner !== ME) return;
   S.buildTab = at ? 'b' : (tab || S.buildTab); S.buildTown = k;
   var o, opts;
   if (at) {
@@ -415,14 +418,14 @@ function openBuild(tab, at) {
   } else {
     
     HX.shipOptions(G, k).forEach(function (op) {
-      var s = HX.shipStat(G, 0, op.id);
+      var s = HX.shipStat(G, ME, op.id);
       o += '<button class="item" data-act="enq" data-kind="s" data-id="' + op.id + '"' + (op.ok ? '' : ' disabled') + '><span class="art">' + shipImg(F.key, op.id, 0.85) + '</span><span class="grow"><span class="nm">' + s.n + '</span><span class="sline">Guns ' + num(s.atk) + ' · hull ' + num(s.hp) + ' · moves ' + s.spd + (s.upk ? ' · ' + num(s.upk) + ' rum' : '') + '</span><span class="trait">' + traitHTML(s.tr) + '</span>' + (op.ok ? '' : '<span class="why">' + op.why + '</span>') + '</span><span class="rt">' + costHTML(op.cost, F) + '<span class="hint">' + turns(op.time) + '</span></span></button>';
     });
   }
   modal(o + '</div>');
 }
 function openTech() {
-  var G = S.G, F = G.factions[0], inc = HX.income(G, 0), av = HX.availTech(F);
+  var G = S.G, F = G.factions[ME], inc = HX.income(G, ME), av = HX.availTech(F);
   if (!S.techSel || F.tech[S.techSel]) S.techSel = F.research || av[0] || HX.TECH_ORDER[0];
   var o = head('Discoveries') + '<div class="hint">' + ic('sci', 's12') + ' +' + inc.s + ' lore a turn' + (F.rp && !F.research ? ' · ' + F.rp + ' in hand' : '') + '</div><div class="tree">';
   HX.BRANCH.forEach(function (b) { o += '<div class="bh">' + b.toUpperCase() + '</div>'; });
@@ -442,19 +445,19 @@ function openTech() {
   modal(o);
 }
 function openDiplo() {
-  var G = S.G, F = G.factions[0], sh = HX.islandsHeld(G), o = head('Parley');
-  o += '<div class="row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px"><div class="grp" style="margin:0">ROADS TO VICTORY</div><div>Take every rival capital: <b>' + G.factions.filter(function (x) { return x.id && !x.alive; }).length + ' of ' + (G.factions.length - 1) + '</b> fallen.</div><div>Or hold ' + sh.need + ' of ' + sh.total + ' islands for ' + HX.HEG_TURNS + ' turns: you hold <b>' + (sh.by[0] || 0) + '</b>.</div><div class="bar"><i style="width:' + Math.min(100, Math.round(100 * (sh.by[0] || 0) / sh.need)) + '%"></i></div></div><div class="list">';
+  var G = S.G, F = G.factions[ME], sh = HX.islandsHeld(G), o = head('Parley');
+  o += '<div class="row" style="flex-direction:column;align-items:stretch;gap:6px;padding:10px"><div class="grp" style="margin:0">ROADS TO VICTORY</div><div>Take every rival capital: <b>' + G.factions.filter(function (x) { return !x.human && !x.alive; }).length + ' of ' + G.factions.filter(function (x) { return !x.human; }).length + '</b> fallen.</div><div>Or hold ' + sh.need + ' of ' + sh.total + ' islands for ' + HX.HEG_TURNS + ' turns: you hold <b>' + (sh.by[ME] || 0) + '</b>.</div><div class="bar"><i style="width:' + Math.min(100, Math.round(100 * (sh.by[ME] || 0) / sh.need)) + '%"></i></div></div><div class="list">';
   var any = false;
   G.factions.forEach(function (O) {
     if (!O.id) return; var FD = HX.FACTIONS[O.key];
     if (!F.met[O.id]) { o += '<div class="row dim">An unknown flag · not yet sighted</div>'; return; }
     any = true;
     if (!O.alive) { o += '<div class="row"><span class="grow">' + sw(G, O.id) + FD.n + '</span><span class="dim">Fallen</span></div>'; return; }
-    var r = HX.rel(G, 0, O.id), att = HX.attitude(G, 0, O.id), mood = att >= 25 ? 'Friendly' : att >= 5 ? 'Cordial' : att > -15 ? 'Wary' : att > -40 ? 'Hostile' : 'Furious';
-    var mine = HX.strength(G, 0), theirs = HX.strength(G, O.id), cmp = theirs > mine * 1.4 ? 'much stronger than you' : theirs > mine * 1.1 ? 'stronger than you' : theirs < mine * 0.7 ? 'much weaker than you' : theirs < mine * 0.9 ? 'weaker than you' : 'about your equal';
+    var r = HX.rel(G, ME, O.id), att = HX.attitude(G, ME, O.id), mood = att >= 25 ? 'Friendly' : att >= 5 ? 'Cordial' : att > -15 ? 'Wary' : att > -40 ? 'Hostile' : 'Furious';
+    var mine = HX.strength(G, ME), theirs = HX.strength(G, O.id), cmp = theirs > mine * 1.4 ? 'much stronger than you' : theirs > mine * 1.1 ? 'stronger than you' : theirs < mine * 0.7 ? 'much weaker than you' : theirs < mine * 0.9 ? 'weaker than you' : 'about your equal';
     o += '<div class="fcard box' + (r.war ? ' atwar' : '') + '"><div class="hd">' + emblemImg(O.key, 44) + '<div style="flex:1;min-width:0"><h3>' + FD.n + '</h3><div class="hint">' + FD.role + ' · ' + cmp + ' · ' + (sh.by[O.id] || 0) + ((sh.by[O.id] || 0) === 1 ? ' island' : ' islands') + '</div></div><div class="state ' + (r.war ? 'bad' : '') + '">' + (r.war ? 'WAR' : r.truce > 0 ? 'TRUCE ' + r.truce : 'PEACE') + '</div></div>';
     o += '<div class="att" role="img" aria-label="Attitude ' + mood + '"><i style="left:' + (50 + att / 2) + '%"></i></div><div class="reasons"><b style="color:var(--ink)">' + mood + '</b>';
-    HX.attReasons(G, 0, O.id).forEach(function (m) { o += '<span>' + m.txt + ' <b class="' + (m.v > 0 ? 'good' : 'bad') + '">' + (m.v > 0 ? '+' : '') + m.v + '</b></span>'; });
+    HX.attReasons(G, ME, O.id).forEach(function (m) { o += '<span>' + m.txt + ' <b class="' + (m.v > 0 ? 'good' : 'bad') + '">' + (m.v > 0 ? '+' : '') + m.v + '</b></span>'; });
     o += '</div><div class="acts" style="margin-top:0">';
     if (r.war) o += '<button class="btn" data-act="peace" data-f="' + O.id + '">Propose peace</button>';
     else if (S.confirmWar === O.id) o += '<button class="btn danger" data-act="war2" data-f="' + O.id + '">' + ic('sword') + '<span>Confirm war' + (r.truce > 0 ? '<small>Breaks the truce</small>' : '') + '</span></button>';
@@ -468,15 +471,15 @@ function openLog() {
   var G = S.G, o = head('Ship\'s log') + '<div class="list">'; S.logSeen = G.log.length; S.tick = null;
   var kcol = { war: '#a3261a', battle: '#c9861f', loss: '#a3261a', tech: '#4d86b8', build: '#8a7a5c', claim: '#2c6b3a', diplo: '#6a4fa3', info: '#8a7a5c' };
   G.log.slice().reverse().forEach(function (l) {
-    var shown = l.f === 0 || l.k === 'war' || l.k === 'diplo' || (l.key && S.vis[l.key]) || (l.k === 'battle' && l.key && G.factions[0].explored[l.key]);
-    if (!shown || (l.f !== 0 && l.f != null && l.f >= 0 && !G.factions[0].met[l.f])) return;
+    var shown = l.f === ME || l.k === 'war' || l.k === 'diplo' || (l.key && S.vis[l.key]) || (l.k === 'battle' && l.key && G.factions[ME].explored[l.key]);
+    if (!shown || (l.f !== ME && l.f != null && l.f >= 0 && !G.factions[ME].met[l.f])) return;
     o += '<button class="logrow" data-act="goto" data-k="' + (l.key || '') + '"><span class="t">T' + l.t + '</span><i class="mk" style="background:' + kcol[l.k] + '"></i><span>' + esc(l.txt) + '</span></button>';
   });
   modal(o + '</div>'); renderFabs(); renderCoach();
 }
 function openEco() {
-  var G = S.G, F = G.factions[0], inc = HX.income(G, 0), o = head('Ledger') + '<table class="eco"><tr><th>Source</th><th>' + ic('timber', 's12') + '</th><th>' + ic('gold', 's12') + '</th><th>' + ic('rum', 's12') + '</th><th>' + ic('sci', 's12') + '</th></tr>';
-  for (var k in G.hexes) { var b = G.hexes[k].base; if (!b || b.owner !== 0) continue; var y = HX.baseYield(G, k); o += '<tr><td>' + esc(G.hexes[k].name) + (HX.besieged(G, k) ? ' <span class="bad">(blockaded)</span>' : '') + '</td><td>' + y.a + '</td><td>' + y.c + '</td><td>' + y.f + '</td><td>' + y.s + '</td></tr>'; }
+  var G = S.G, F = G.factions[ME], inc = HX.income(G, ME), o = head('Ledger') + '<table class="eco"><tr><th>Source</th><th>' + ic('timber', 's12') + '</th><th>' + ic('gold', 's12') + '</th><th>' + ic('rum', 's12') + '</th><th>' + ic('sci', 's12') + '</th></tr>';
+  for (var k in G.hexes) { var b = G.hexes[k].base; if (!b || b.owner !== ME) continue; var y = HX.baseYield(G, k); o += '<tr><td>' + esc(G.hexes[k].name) + (HX.besieged(G, k) ? ' <span class="bad">(blockaded)</span>' : '') + '</td><td>' + y.a + '</td><td>' + y.c + '</td><td>' + y.f + '</td><td>' + y.s + '</td></tr>'; }
   if (F.key === 'comp') o += '<tr><td>Company charter</td><td>2</td><td>2</td><td>2</td><td>0</td></tr>';
   if (F.key === 'order') o += '<tr><td>Order\'s navigators</td><td></td><td></td><td></td><td>+30%</td></tr>';
   if (inc.toll) o += '<tr><td class="bad">Pirates in your waters</td><td class="bad">−' + inc.ta + '</td><td class="bad">−' + inc.tc + '</td><td></td><td></td></tr>';
@@ -491,7 +494,7 @@ function openOptions() {
   modal(head('Options') + tg('sfx', 'Sound effects') + tg('battles', 'Show battle scenes') + '<button class="btn solid" data-act="close">Done</button>', true);
 }
 function openHelp() {
-  var fk = S.G ? S.G.factions[0].key : S.setup.faction;
+  var fk = S.G ? S.G.factions[ME].key : S.setup.faction;
   var tl = ''; HX.SHIP_ORDER.forEach(function (t) { var st = HX.statFor(fk, null, t); tl += '<li><b>' + st.n + '</b>: ' + HX.TRAITS[st.tr][1].toLowerCase().replace(/\.$/, '') + '</li>'; });
   var o = head('How to play') + '<div class="help"><h3>EACH TURN</h3><p>Set ports to work, sail fleets, end the turn. <b>Next</b> jumps to whatever still needs orders.</p>' +
     '<h3>ISLANDS</h3><p>You begin with two ships. Sail alongside a free island and found a port on a shore hex. The first is free; each later port costs more than the last. Every other land hex holds one structure: forest for sawmills, hills for gold mines, cane for distilleries.</p>' +
@@ -531,32 +534,32 @@ var ACT = {
     if (S.modalOpen) { var keep = G.hexes[town].base.queue.length < 3; closeModal(true); refresh(); if (keep && d.kind === 's') openBuild('s'); } else refresh();
   },
   qcancel: function (d) { HX.cancelQueue(S.G, townOf(S.G, S.sel), +d.i); sfx('tap'); refresh(); },
-  claim: function () { var G = S.G, fl = HX.fleetAt(G, S.sel, 0), r = HX.claim(G, fl); if (!r.ok) { toast(r.why); sfx('err'); return; } RN.addFx({ type: 'flash', key: S.sel, dur: 600, col: fcol(G, 0) }); sfx('build'); toast('Your flag flies over <b>' + esc(G.hexes[S.sel].name) + '</b>'); refresh(); },
-  found: function (d) { var G = S.G, r = HX.found(G, 0, d.k); if (!r.ok) { toast(r.why); sfx('err'); return; } RN.addFx({ type: 'flash', key: d.k, dur: 700, col: fcol(G, 0) }); sfx('build'); toast('<b>' + esc(G.hexes[d.k].name) + '</b> founded'); S.sel = d.k; S.tab = 'place'; refresh(); },
-  raid: function () { var G = S.G, fl = HX.fleetAt(G, S.sel, 0), r = HX.raid(G, fl); if (!r.ok) { toast(r.why); return; } sfx('boom'); RN.addFx({ type: 'text', screen: true, key: S.sel, dur: 1400, txt: '+' + (r.loot.a + r.loot.c + r.loot.f), col: P.gold }); toast('Plunder: ' + HX.costStr(r.loot)); refresh(); },
-  hold: function () { var fl = HX.fleetAt(S.G, S.sel, 0); fl.hold = !fl.hold; if (fl.hold) { fl.dest = null; fl.auto = false; } sfx('tap'); refresh(); },
-  stop: function () { var fl = HX.fleetAt(S.G, S.sel, 0); fl.dest = null; refresh(); },
+  claim: function () { var G = S.G, fl = HX.fleetAt(G, S.sel, ME), r = HX.claim(G, fl); if (!r.ok) { toast(r.why); sfx('err'); return; } RN.addFx({ type: 'flash', key: S.sel, dur: 600, col: fcol(G, ME) }); sfx('build'); toast('Your flag flies over <b>' + esc(G.hexes[S.sel].name) + '</b>'); refresh(); },
+  found: function (d) { var G = S.G, r = HX.found(G, ME, d.k); if (!r.ok) { toast(r.why); sfx('err'); return; } RN.addFx({ type: 'flash', key: d.k, dur: 700, col: fcol(G, ME) }); sfx('build'); toast('<b>' + esc(G.hexes[d.k].name) + '</b> founded'); S.sel = d.k; S.tab = 'place'; refresh(); },
+  raid: function () { var G = S.G, fl = HX.fleetAt(G, S.sel, ME), r = HX.raid(G, fl); if (!r.ok) { toast(r.why); return; } sfx('boom'); RN.addFx({ type: 'text', screen: true, key: S.sel, dur: 1400, txt: '+' + (r.loot.a + r.loot.c + r.loot.f), col: P.gold }); toast('Plunder: ' + HX.costStr(r.loot)); refresh(); },
+  hold: function () { var fl = HX.fleetAt(S.G, S.sel, ME); fl.hold = !fl.hold; if (fl.hold) { fl.dest = null; fl.auto = false; } sfx('tap'); refresh(); },
+  stop: function () { var fl = HX.fleetAt(S.G, S.sel, ME); fl.dest = null; refresh(); },
   explore: function () {
-    var G = S.G, fl = HX.fleetAt(G, S.sel, 0); if (!fl) return;
+    var G = S.G, fl = HX.fleetAt(G, S.sel, ME); if (!fl) return;
     if (fl.auto) { fl.auto = false; fl.dest = null; sfx('tap'); refresh(); return; }
     var part = S.detach ? HX.split(G, fl, S.detach) : fl; S.detach = null; S.courseMode = false; if (!part) return;
     var r = HX.explore(G, part); sfx('move'); S.sel = HX.fkey(r.fleet); S.tab = 'fleet';
     toast(r.done && !r.moved ? 'Nothing left to chart in range' : 'Exploring'); refresh();
   },
   course: function () { S.courseMode = !S.courseMode; sfx('tap'); calcReach(); renderSheet(); layout(); },
-  detach: function () { var fl = HX.fleetAt(S.G, S.sel, 0); if (S.detach) S.detach = null; else { S.detach = {}; var top = HX.SHIP_ORDER.filter(function (t) { return fl.ships[t]; })[0]; S.detach[top] = 1; } sfx('tap'); calcReach(); renderSheet(); layout(); },
-  det: function (d) { var fl = HX.fleetAt(S.G, S.sel, 0), v = (S.detach[d.id] || 0) + (+d.d); S.detach[d.id] = Math.max(0, Math.min(fl.ships[d.id], v)); calcReach(); renderSheet(); },
+  detach: function () { var fl = HX.fleetAt(S.G, S.sel, ME); if (S.detach) S.detach = null; else { S.detach = {}; var top = HX.SHIP_ORDER.filter(function (t) { return fl.ships[t]; })[0]; S.detach[top] = 1; } sfx('tap'); calcReach(); renderSheet(); layout(); },
+  det: function (d) { var fl = HX.fleetAt(S.G, S.sel, ME), v = (S.detach[d.id] || 0) + (+d.d); S.detach[d.id] = Math.max(0, Math.min(fl.ships[d.id], v)); calcReach(); renderSheet(); },
   tab: function (d) { S.tab = d.id; sfx('tap'); calcReach(); renderSheet(); layout(); },
   attack: function (d) { doAttack(d.k); },
   bskip: function () { if (battleCtl) battleCtl.skip(); },
   techsel: function (d) { S.techSel = d.id; sfx('tap'); openTech(); },
-  techgo: function (d) { HX.setResearch(S.G, 0, d.id); sfx('tech'); closeModal(true); toast('Studying ' + HX.TECH[d.id].n); refresh(); },
+  techgo: function (d) { HX.setResearch(S.G, ME, d.id); sfx('tech'); closeModal(true); toast('Studying ' + HX.TECH[d.id].n); refresh(); },
   war: function (d) { S.confirmWar = +d.f; openDiplo(); },
-  war2: function (d) { HX.declareWar(S.G, 0, +d.f); sfx('war'); closeModal(true); toast('<span class="bad">You are at war with the ' + HX.FACTIONS[S.G.factions[+d.f].key].n + '.</span>'); refresh(); },
-  peace: function (d) { closeModal(true); HX.proposePeace(S.G, 0, +d.f); refresh(); },
-  acceptpeace: function (d) { HX.makePeace(S.G, 0, +d.f); closeModal(true); toast('Peace with the ' + HX.FACTIONS[S.G.factions[+d.f].key].n + '.'); refresh(); },
-  gift: function (d) { closeModal(true); HX.gift(S.G, 0, +d.f, 'c', 20); refresh(); },
-  goto: function (d) { if (d.k && S.G.hexes[d.k] && S.G.factions[0].explored[d.k]) { closeModal(true); select(d.k, true); } },
+  war2: function (d) { HX.declareWar(S.G, ME, +d.f); sfx('war'); closeModal(true); toast('<span class="bad">You are at war with the ' + HX.FACTIONS[S.G.factions[+d.f].key].n + '.</span>'); refresh(); },
+  peace: function (d) { closeModal(true); HX.proposePeace(S.G, ME, +d.f); refresh(); },
+  acceptpeace: function (d) { HX.makePeace(S.G, ME, +d.f); closeModal(true); toast('Peace with the ' + HX.FACTIONS[S.G.factions[+d.f].key].n + '.'); refresh(); },
+  gift: function (d) { closeModal(true); HX.gift(S.G, ME, +d.f, 'c', 20); refresh(); },
+  goto: function (d) { if (d.k && S.G.hexes[d.k] && S.G.factions[ME].explored[d.k]) { closeModal(true); select(d.k, true); } },
   tutskip: function () { S.G.tut = false; S.G.tutStep = null; renderCoach(); tutCheck(); },
   tutdone: function () { S.G.tut = false; S.G.tutStep = null; renderCoach(); tutCheck(); }
 };
@@ -595,7 +598,7 @@ function loop(t) {
   if (Q.lvl < 2 && Q.ema > 27 && t - Q.since > 3000) { Q.lvl++; Q.since = t; Q.ema = 16; RN.setQuality(Q.lvl); layout(); }
   if (!Q.touch && !RN.moving() && (Q.n++ & 1)) return;
   var cvs = $('#cv'), ctx = cvs.getContext('2d');
-  if (S.screen === 'game' && S.G) RN.frame(ctx, t, { G: S.G, vis: S.vis, sel: S.sel, reach: S.reach, course: S.course, sup: S.sup, sites: S.sites, accent: fcol(S.G, 0), lit: ART.mix(fcol(S.G, 0), '#ffffff', 0.6), tutHex: S.tutHex, idle: S.idleBases, selFleet: sheetTab() === 'fleet' });
+  if (S.screen === 'game' && S.G) RN.frame(ctx, t, { G: S.G, vis: S.vis, sel: S.sel, reach: S.reach, course: S.course, sup: S.sup, sites: S.sites, accent: fcol(S.G, ME), lit: ART.mix(fcol(S.G, ME), '#ffffff', 0.6), tutHex: S.tutHex, idle: S.idleBases, selFleet: sheetTab() === 'fleet' });
   else RN.titleFrame(ctx, t, S.setup.faction, S.screen === 'title');
 }
 function boot() {

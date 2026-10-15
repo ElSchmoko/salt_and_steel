@@ -55,7 +55,7 @@ function resize(vw, vh, dpr) { V.vw = vw; V.vh = vh; V.dpr = dpr; }
 function yShift() { return (V.vh / 2 - (V.padTop + (V.vh - V.padTop - V.padBot) / 2)) / V.z; }
 function clampCam() { if (!V.bounds) return; var b = V.bounds, mx = Math.max(0, b.x - V.vw / (2 * V.z) + 90), my = Math.max(0, b.y - (V.vh - V.padTop - V.padBot) / (2 * V.z) + 90), ys = yShift(); V.cx = Math.max(-mx, Math.min(mx, V.cx)); V.cy = Math.max(-my + ys, Math.min(my + ys, V.cy)); if (V.tx != null) { V.tx = Math.max(-mx, Math.min(mx, V.tx)); V.ty = Math.max(-my + ys, Math.min(my + ys, V.ty)); } }
 function fitZ() { if (!V.bounds) return 1; return Math.min(V.vw / (V.bounds.x * 2 + 40), (V.vh - V.padTop - 40) / (V.bounds.y * 2 + 40)); }
-function reset(G) { fleetPos = {}; fx = []; V.minZ = Math.max(0.2, Math.min(0.8, fitZ())); V.z = V.tz = V.vw >= 480 ? 1 : 0.9; var f0 = G.fleets.filter(function (x) { return x.owner === 0; })[0], p = hexXY(G.hexes[G.factions[0].capital || (f0 ? HX.fkey(f0) : '0,0')]); V.cx = p.x; V.cy = p.y + yShift(); V.tx = V.ty = null; clampCam(); }
+function reset(G) { fleetPos = {}; fx = []; V.minZ = Math.max(0.2, Math.min(0.8, fitZ())); V.z = V.tz = V.vw >= 480 ? 1 : 0.9; var f0 = G.fleets.filter(function (x) { return x.owner === ME; })[0], p = hexXY(G.hexes[G.factions[ME].capital || (f0 ? HX.fkey(f0) : '0,0')]); V.cx = p.x; V.cy = p.y + yShift(); V.tx = V.ty = null; clampCam(); }
 function focus(G, k, instant) { var h = G.hexes[k]; if (!h) return; var p = hexXY(h); V.tx = p.x; V.ty = p.y + yShift(); if (instant) { V.cx = V.tx; V.cy = V.ty; V.tx = V.ty = null; } }
 function onScreen(G, k) { var p = hexXY(G.hexes[k]), sx = (p.x - V.cx) * V.z + V.vw / 2, sy = (p.y - V.cy) * V.z + V.vh / 2; return sx > 40 && sx < V.vw - 40 && sy > V.padTop + 40 && sy < V.vh - V.padBot - 40; }
 function panBy(dx, dy) { V.cx -= dx / V.z; V.cy -= dy / V.z; V.tx = V.ty = null; clampCam(); }
@@ -90,7 +90,7 @@ function frame(ctx, t, st) {
   if (Math.abs(V.tz - V.z) > 0.003) V.z += (V.tz - V.z) * 0.25; else V.z = V.tz;
   clampCam();
   var z = V.z, dpr = V.dpr, k = z * dpr, left = V.cx - V.vw / (2 * z), top = V.cy - V.vh / (2 * z), ww = V.vw / z, wh = V.vh / z, pt = patterns(ctx);
-  var F = G.factions[0], key, h, p, i;
+  var F = G.factions[ME], key, h, p, i;
   function world() { ctx.setTransform(k, 0, 0, k, (V.vw / 2 - V.cx * z) * dpr, (V.vh / 2 - V.cy * z) * dpr); }
   function vis(x, y, m) { return x > left - m && x < left + ww + m && y > top - m && y < top + wh + m; }
   world(); ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = QUAL ? 'low' : 'high';
@@ -155,14 +155,14 @@ function frame(ctx, t, st) {
   // fleets
   var seenF = {}, dt = 0.2;
   G.fleets.forEach(function (fl) {
-    var fk = HX.fkey(fl); if (!HX.fleetVisible(G, 0, fl, st.vis)) return;
+    var fk = HX.fkey(fl); if (!HX.fleetVisible(G, ME, fl, st.vis)) return;
     var hh = G.hexes[fk], pp = hexXY(hh), tx = pp.x, ty = pp.y + 12, docked = !!hh.base;
     if (docked) { var dk = dockDir(G, fk); tx = pp.x + dk.x * 37; ty = pp.y + dk.y * 33 + 12; }
     var fp = fleetPos[fl.id];
     if (!fp) fp = fleetPos[fl.id] = { x: tx, y: ty }; else { fp.x += (tx - fp.x) * dt; fp.y += (ty - fp.y) * dt; if (Math.abs(tx - fp.x) < 0.3) fp.x = tx; if (Math.abs(ty - fp.y) < 0.3) fp.y = ty; }
-    fp.k = fk; fp.docked = docked && fl.owner === 0; seenF[fl.id] = 1;
+    fp.k = fk; fp.docked = docked && fl.owner === ME; seenF[fl.id] = 1;
     if (!vis(fp.x, fp.y, 80)) return;
-    var cls = HX.topClass(fl.ships), sp = shipOf(G, fl.owner, cls), mine = fl.owner === 0, Ls = ART.SHIP[cls].L, moving = Math.abs(tx - fp.x) + Math.abs(ty - fp.y) > 1;
+    var cls = HX.topClass(fl.ships), sp = shipOf(G, fl.owner, cls), mine = fl.owner === ME, Ls = ART.SHIP[cls].L, moving = Math.abs(tx - fp.x) + Math.abs(ty - fp.y) > 1;
     var bobY = Math.sin(t * 0.0022 + fl.id * 1.7) * 1.1, fxp = fp.x, fyp = fp.y + bobY, flip = !mine, c = fl.owner < 0 ? P.neutral : col(G, fl.owner);
     var picked = mine && st.selFleet && fk === st.sel;
     if (picked) { var pu = 0.5 + 0.5 * Math.sin(t * 0.006); ctx.beginPath(); ctx.ellipse(fxp, fp.y + 2, Ls * 0.82, 11, 0, 0, Math.PI * 2); ctx.fillStyle = ART.rgba(st.accent, 0.38); ctx.fill(); ctx.strokeStyle = P.ink; ctx.lineWidth = 4.6; ctx.stroke(); ctx.strokeStyle = ART.mix(st.accent, '#ffffff', 0.35 + 0.5 * pu); ctx.lineWidth = 2.4; ctx.stroke(); }
